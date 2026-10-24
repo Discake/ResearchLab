@@ -110,3 +110,5 @@ and metric updates, preservation of snapshots/evidence, and session retention af
 waiting or failed cleanup. Disposing an unstarted operation is verified to forbid later
 launch. Tests also exercise idempotent migrations and nullable legacy ownership. Windows is
 verified; Unix execution/locking has not been verified in this environment.
+
+M3.6 exposes this use case as `run recover`; see [CLI output and limits](local-run-completion.md).

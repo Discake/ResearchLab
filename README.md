@@ -173,3 +173,7 @@ Smoke-тест допускает только System.Runtime, System.Collection
 Использовано согласованное исправление EN/RU: ошибка запуска переводит Run
 из Created сразу в Failed. Интеграционные тесты используют реальные временные БД
 и Git-репозитории; проверены на Windows. Импорт не запускает задачи. Следующий этап — M3.
+
+M3.6 adds `run recover` and `<data-dir>/<RunId:N>/output` via `RESEARCHLAB_OUTPUT_DIR`, preserving workspace CWD. [Contract and remaining limits](docs/local-run-completion.md).
+
+M3.6 добавляет `run recover` и каталог результатов каждого Run через `RESEARCHLAB_OUTPUT_DIR`, сохраняя CWD проекта. [Контракт и оставшиеся ограничения](docs/local-run-completion.ru.md).

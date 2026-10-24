@@ -3,7 +3,7 @@ using ResearchLab.Application;
 
 namespace ResearchLab.Cli;
 
-public enum ConsoleCommand { ProjectList, ExperimentList, RunList, RunShow, RunStart, DatabaseInit, ProjectImport, ExperimentCreate }
+public enum ConsoleCommand { ProjectList, ExperimentList, RunList, RunShow, RunStart, RunRecover, DatabaseInit, ProjectImport, ExperimentCreate }
 
 public sealed record CommandArguments(ConsoleCommand Command, string DatabasePath, string DataDirectory,
     Guid? Id, RunPageRequest Page, string Parameters = "{}", bool IncludeLogs = false,
@@ -46,6 +46,7 @@ public sealed record CommandArguments(ConsoleCommand Command, string DatabasePat
             ["run", "list"] => ConsoleCommand.RunList,
             ["run", "show", _] => ConsoleCommand.RunShow,
             ["run", "start", _] => ConsoleCommand.RunStart,
+            ["run", "recover"] => ConsoleCommand.RunRecover,
             ["database", "init"] => ConsoleCommand.DatabaseInit,
             ["project", "import", _] => ConsoleCommand.ProjectImport,
             ["experiment", "create"] => ConsoleCommand.ExperimentCreate,

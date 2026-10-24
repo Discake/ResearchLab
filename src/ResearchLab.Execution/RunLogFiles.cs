@@ -3,7 +3,7 @@ using ResearchLab.Domain;
 
 namespace ResearchLab.Execution;
 
-// Execution diagnostics only; this is not an artifact registration/storage service.
+// Run-local filesystem allocation; this is not an artifact registration/storage service.
 public sealed class RunLogFiles : IRunLogFiles
 {
     private readonly string root;
@@ -39,6 +39,18 @@ public sealed class RunLogFiles : IRunLogFiles
         CheckPath(Path.Combine(directory, "stdout.log"));
         CheckPath(Path.Combine(directory, "stderr.log"));
         return new(Path.Combine(runId.Value.ToString("N"), "stdout.log"), Path.Combine(runId.Value.ToString("N"), "stderr.log"));
+    }
+
+    // Called only after Create has exclusively reserved the attempt's log files.
+    internal string CreateOutputDirectory(RunId runId)
+    {
+        var directory = Path.Combine(DirectoryPath(runId), "output");
+        CheckPath(directory);
+        if (Path.Exists(directory))
+            throw new IOException("Run output directory already exists.");
+        Directory.CreateDirectory(directory);
+        CheckPath(directory);
+        return directory;
     }
 
     public Stream OpenRead(RunId runId, RunLogStream stream)

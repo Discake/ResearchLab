@@ -10,6 +10,10 @@ switch (args.FirstOrDefault())
         return await HoldOwnershipAsync(args);
     case "success":
         return 0;
+    case "output-directory":
+        var outputDirectory = Environment.GetEnvironmentVariable("RESEARCHLAB_OUTPUT_DIR")!;
+        await File.WriteAllTextAsync(Path.Combine(outputDirectory, "synthetic-result.txt"), Environment.CurrentDirectory);
+        return 0;
     case "fail":
         Console.Error.WriteLine("Synthetic failure.");
         return 7;

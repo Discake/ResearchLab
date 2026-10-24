@@ -136,6 +136,10 @@ Acceptance:
 - Three invocations with different parameters produce distinct Run records.
 - Failed and canceled runs retain diagnostics.
 
+#### M3.6 — local CLI completion (implemented)
+
+Explicit CLI recovery delegates to M3.3; per-Run output allocation and RESEARCHLAB_OUTPUT_DIR preserve workspace CWD. No process ownership changes or M4 registration. [EN contract and remaining M3 boundaries](docs/local-run-completion.md) / [RU](docs/local-run-completion.ru.md).
+
 ### M4 — Protocol, metrics and artifacts
 
 **Outcome:** experimental evidence is recorded with source provenance.
@@ -143,7 +147,7 @@ Acceptance:
 Implement:
 - Versioned line protocol `@researchlab/v1 {json}` from stdout.
 - Metric event parser and validation, bounded event lengths/counts, durable storage.
-- Pass parameters via `RESEARCHLAB_PARAMETERS_JSON`; output directory via `RESEARCHLAB_OUTPUT_DIR`.
+- Reuse parameter transport via `RESEARCHLAB_PARAMETERS_JSON` and per-Run output via `RESEARCHLAB_OUTPUT_DIR` (available in M3.6).
 - Artifact registration restricted to run output directory, with symlink/canonicalization guards, quotas and SHA-256.
 - File viewing/download through safe application endpoints (not raw arbitrary filesystem paths).
 - C++ sample using the protocol and producing metric series + one artifact.

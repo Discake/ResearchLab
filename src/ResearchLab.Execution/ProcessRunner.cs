@@ -96,6 +96,7 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
                         try
                         {
                             (output, error) = logs.Create(runId);
+                            var outputDirectory = logs.CreateOutputDirectory(runId);
                             if (OperatingSystem.IsWindows() && !string.Equals(Path.GetExtension(launch.ExecutablePath), ".exe", StringComparison.OrdinalIgnoreCase))
                                 throw new InvalidOperationException("Native executable required.");
                             var start = new ProcessStartInfo(launch.ExecutablePath)
@@ -111,6 +112,7 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
                                 start.ArgumentList.Add(argument);
                             start.Environment["RESEARCHLAB_PARAMETERS_JSON"] = JsonSerializer.Serialize(
                                 launch.ParametersSnapshot.ToDictionary(pair => pair.Key, pair => pair.Value.Value));
+                            start.Environment["RESEARCHLAB_OUTPUT_DIR"] = outputDirectory;
                             var candidate = new Process { StartInfo = start };
                             try
                             {
@@ -123,7 +125,7 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
                         catch (Exception exception) when (exception is Win32Exception or IOException or InvalidOperationException or UnauthorizedAccessException)
                         {
                             outcome = Outcome.Failed;
-                            result = new(null, false, "The operating system could not prepare logs or start the declared native executable.");
+                            result = new(null, false, "The operating system could not prepare run storage or start the declared native executable.");
                             Release();
                             return result;
                         }

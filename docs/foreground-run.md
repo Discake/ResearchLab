@@ -145,3 +145,5 @@ reopen it in another invocation, reject EOF/no consent, recheck changed task/exe
 validate typed inputs, distinguish nonzero exit/timeout/cancellation, and verify owner
 retention and terminal persistence. Windows console-control-event coverage exercises the
 actual Program/CancelKeyPress path in an isolated hidden **test** console.
+
+For explicit `run recover` and the program CWD/RESEARCHLAB_OUTPUT_DIR contract, see [M3.6](local-run-completion.md).

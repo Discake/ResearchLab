@@ -143,7 +143,7 @@ Example `researchlab.json` (illustrative schema, versioned independently):
 }
 ```
 
-ResearchLab runs explicitly trusted commands only after user action. Pass program and argument list separately; **do not invoke a command through a shell by default**. Resolve paths inside the allowed workspace. Use a dedicated working/output directory and limits for duration, output size, and number of metrics.
+ResearchLab runs explicitly trusted commands only after user action. Pass program and argument list separately; **do not invoke a command through a shell by default**. Resolve paths inside the allowed workspace. Preserve the validated project workspace as CWD for compatibility and allocate a dedicated output directory per Run under configured ResearchLab storage. Programs must use the absolute `RESEARCHLAB_OUTPUT_DIR` for results; ordinary relative writes still target CWD. Directory allocation is not filesystem isolation. Apply limits for duration and logs; output-file quotas and metric limits belong to M4. See the [M3.6 contract](docs/local-run-completion.md).
 
 ### Input parameters
 

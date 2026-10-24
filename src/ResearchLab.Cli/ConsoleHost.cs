@@ -22,9 +22,11 @@ public static partial class ConsoleHost
         researchlab --database <sqlite-file> --data-dir <log-root> run show <run-id>
         researchlab --database <sqlite-file> --data-dir <log-root> run show <run-id> --include-logs
         researchlab --database <sqlite-file> --data-dir <log-root> run start <experiment-id> [--parameters <json-object>]
+        researchlab --database <sqlite-file> --data-dir <log-root> run recover
         researchlab --help
         Both paths are explicit; relative paths resolve against the current directory.
-        --data-dir is the private log root used by RunLogFiles; start creates bounded logs here.
+        --data-dir is private storage; start creates bounded logs and <RunId:N>/output here.
+        CWD remains the workspace; programs must use RESEARCHLAB_OUTPUT_DIR for output files.
         Run pages use Application defaults and limits (50 by default, maximum 100).
         Start displays a trust review on stderr; type yes on stdin to approve this invocation only.
         Output: JSON on stdout; review/progress/errors on stderr. Only database init applies migrations. No automatic recovery.
@@ -77,6 +79,16 @@ public static partial class ConsoleHost
                     break;
                 case ConsoleCommand.RunStart:
                     return await StartAsync(request, store, catalog, output, error, input ?? Console.In, cancellationToken);
+                case ConsoleCommand.RunRecover:
+                    await error.WriteLineAsync("Warning: Interrupted records verified owner loss; it does not prove child process termination. Recovery never kills saved PIDs. Active or unverified owners remain unchanged.");
+                    var recovery = await new RunRecovery(store).RecoverAsync(cancellationToken);
+                    result = new
+                    {
+                        Recovered = recovery.Recovered.Select(id => id.Value).ToArray(),
+                        Conflicts = recovery.Conflicts.Select(id => id.Value).ToArray(),
+                        recovery.UnverifiedSessions
+                    };
+                    break;
                 case ConsoleCommand.ProjectList:
                     result = (await catalog.ListProjectsAsync(cancellationToken)).Select(project => new
                     {

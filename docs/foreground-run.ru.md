@@ -144,3 +144,5 @@ ProjectCatalog; они не исполняют задачи и не создаю
 валидируют типизированный ввод, различают ненулевой выход/timeout/отмену, проверяют
 удержание владельца и терминальную запись. Windows-тест console control event проходит
 настоящий путь Program/CancelKeyPress в отдельной скрытой **тестовой** консоли.
+
+Команда `run recover` и контракт CWD/RESEARCHLAB_OUTPUT_DIR описаны в [M3.6](local-run-completion.ru.md).

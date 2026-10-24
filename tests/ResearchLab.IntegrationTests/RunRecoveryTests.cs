@@ -12,6 +12,37 @@ namespace ResearchLab.IntegrationTests;
 public sealed class RunRecoveryTests
 {
     [Fact]
+    public async Task CliRecoveryReportsSkippedOwnersAndRecoversEndedRunOnlyOnce()
+    {
+        using var fixture = new TestWorkspace();
+        var (_, experiment, _) = await fixture.SeedRunAsync();
+        var run = NewRun(experiment);
+        using var active = fixture.Store.OpenRunSession();
+        var activeRun = NewRun(experiment);
+        await active.AddRunAsync(activeRun, TestContext.Current.CancellationToken);
+        using (var ended = fixture.Store.OpenRunSession())
+            await ended.AddRunAsync(run, TestContext.Current.CancellationToken);
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+            var code = await ResearchLab.Cli.ConsoleHost.RunAsync(
+                ["--database", fixture.Database, "--data-dir", Path.Combine(fixture.Root, "data"), "run", "recover"],
+                output, error, TestContext.Current.CancellationToken);
+            Assert.Equal(0, code);
+            using var json = System.Text.Json.JsonDocument.Parse(output.ToString());
+            var recovered = json.RootElement.GetProperty("recovered");
+            Assert.Equal(attempt == 0 ? 1 : 0, recovered.GetArrayLength());
+            if (attempt == 0) Assert.Equal(run.Id.Value, recovered[0].GetGuid());
+            Assert.Equal(active.Id, json.RootElement.GetProperty("unverifiedSessions")[0].GetGuid());
+            Assert.Equal(0, json.RootElement.GetProperty("conflicts").GetArrayLength());
+            Assert.Contains("does not prove child process termination", error.ToString());
+        }
+        Assert.Equal(1, (await fixture.Store.GetRunAsync(run.Id, TestContext.Current.CancellationToken))!.Version);
+        Assert.Equal(RunStatus.Created, (await fixture.Store.GetRunAsync(activeRun.Id, TestContext.Current.CancellationToken))!.Status);
+    }
+
+    [Fact]
     public async Task OwnershipMigrationPreservesPreexistingUnownedRunAndDoesNotGuessItsSession()
     {
         using var fixture = new TestWorkspace();

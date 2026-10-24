@@ -74,7 +74,7 @@ For explicit cancellation use PrepareRunAsync and retain its RunOperation: Execu
 the attempt, WaitAsync(token) cancels only waiting, and RequestCancellation requests stopping.
 See the managed cancellation contract for races, retries and confirmation requirements.
 Run details and paged history reads are implemented through [RunHistory](run-history.md).
-Background execution and M4 artifact directory allocation are not implemented.
+Background execution and M4 artifact registration are not implemented. M3.6 adds [per-Run output allocation](local-run-completion.md).
 Explicit recovery now follows [M3.3 local recovery](run-recovery.md).
 
 The inherited environment is not sandboxed. Filesystem TOCTOU races and
@@ -112,5 +112,5 @@ without a directory return null; reading a missing file raises a filesystem erro
 and reads reject reparse points/symlinks/junctions in files, Run directories, the root and
 its ancestors. Concurrent replacement between validation and open remains a TOCTOU limitation
 of trusted local storage, not protection against a hostile process with write access to the
-root/ancestors. The host must restrict those permissions. No new output environment variable
-is passed to the child; RESEARCHLAB_PARAMETERS_JSON is unchanged. This is not M4 Artifact Storage.
+root/ancestors. The host must restrict those permissions. M3.6 passes RESEARCHLAB_OUTPUT_DIR
+for [per-Run output](local-run-completion.md); this is not M4 Artifact Storage.

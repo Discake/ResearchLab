@@ -21,10 +21,24 @@ foreach ($file in Get-ChildItem -LiteralPath $payload -File) {
     Copy-Item -LiteralPath $file.FullName -Destination $workspace
 }
 $executable = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) { 'researchlab-demo.exe' } else { 'researchlab-demo' }
-@{
+$config = @{
     schemaVersion = 1
-    tasks = @{ benchmark = @{ executable = "./$executable"; args = @(); timeoutSeconds = 60 } }
-} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $workspace 'researchlab.json') -Encoding utf8
+    tasks = @{
+        benchmark = @{
+            executable = "./$executable"
+            args = @()
+            timeoutSeconds = 60
+        }
+    }
+} | ConvertTo-Json -Depth 5
+
+$configPath = Join-Path $workspace 'researchlab.json'
+
+[System.IO.File]::WriteAllText(
+    $configPath,
+    $config,
+    (New-Object System.Text.UTF8Encoding($false))
+)
 
 function Invoke-Lab([string[]]$Words) {
     $response = & dotnet $cli --database $database --data-dir $logs @Words

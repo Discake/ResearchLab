@@ -11,6 +11,51 @@ namespace ResearchLab.IntegrationTests;
 
 public sealed partial class RunExecutionTests
 {
+    [Fact]
+    public async Task ConcurrentRunsWriteDistinctOutputDirectoriesAndKeepWorkspaceCwd()
+    {
+        using var fixture = new TestWorkspace();
+        var (catalog, experiment) = await SeedAsync(fixture, "output-directory");
+        await TrustAsync(catalog, experiment);
+        var root = Path.Combine(fixture.Root, "data");
+        var execution = new RunExecution(fixture.Store, catalog, new WorkspaceInspector(), new ProcessRunner(new RunLogFiles(root)));
+        var ids = await Task.WhenAll(Enumerable.Range(0, 3).Select(_ => execution.StartRunAsync(
+            experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken)));
+        Assert.Equal(3, ids.Distinct().Count());
+        foreach (var id in ids)
+        {
+            Assert.Equal(RunStatus.Succeeded, (await fixture.Store.GetRunAsync(id, TestContext.Current.CancellationToken))!.Status);
+            var result = Path.Combine(root, id.Value.ToString("N"), "output", "synthetic-result.txt");
+            Assert.Equal(fixture.Workspace, await File.ReadAllTextAsync(result, TestContext.Current.CancellationToken));
+        }
+        Assert.False(File.Exists(Path.Combine(fixture.Workspace, "synthetic-result.txt")));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExistingOrLinkedAttemptDirectoryPreventsStartupWithoutOverwriting(bool linked)
+    {
+        using var fixture = new TestWorkspace();
+        var (catalog, experiment) = await SeedAsync(fixture, "output-directory");
+        await TrustAsync(catalog, experiment);
+        var prepared = await new RunPreparation(catalog).PrepareAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
+        var id = RunId.New();
+        var root = Path.Combine(fixture.Root, "data");
+        Directory.CreateDirectory(root);
+        var attempt = Path.Combine(root, id.Value.ToString("N"));
+        if (linked) await fixture.LinkDirectoryAsync(attempt, fixture.Workspace);
+        else Directory.CreateDirectory(attempt);
+        var sentinel = Path.Combine(attempt, "sentinel.txt");
+        await File.WriteAllTextAsync(sentinel, "retained", TestContext.Current.CancellationToken);
+        var result = await new ProcessRunner(new RunLogFiles(root)).ExecuteAsync(id, prepared,
+            _ => throw new InvalidOperationException("Must not start."));
+        Assert.Null(result.ExitCode);
+        Assert.NotNull(result.FailureReason);
+        Assert.Equal("retained", await File.ReadAllTextAsync(sentinel, TestContext.Current.CancellationToken));
+        Assert.False(Directory.Exists(Path.Combine(attempt, "output")));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
