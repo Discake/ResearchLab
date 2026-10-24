@@ -49,7 +49,7 @@ public sealed class RunExecution(IResearchStore store, ProjectCatalog catalog, I
         ProcessResult result;
         try
         {
-            result = await runner.ExecuteAsync(prepared, async started =>
+            result = await runner.ExecuteAsync(run.Id, prepared, async started =>
             {
                 try
                 {

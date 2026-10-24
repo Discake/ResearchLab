@@ -20,6 +20,11 @@ switch (args.FirstOrDefault())
     case "overflow":
         await Task.WhenAll(WriteAsync(Console.Out, 2 * 1024 * 1024), WriteAsync(Console.Error, 2 * 1024 * 1024));
         return 0;
+    case "logged-wait":
+        Console.Out.WriteLine("Synthetic waiting stdout.");
+        Console.Error.WriteLine("Synthetic waiting stderr.");
+        await Task.Delay(TimeSpan.FromSeconds(30));
+        return 0;
     case "wait":
         await Task.Delay(TimeSpan.FromSeconds(30));
         return 0;

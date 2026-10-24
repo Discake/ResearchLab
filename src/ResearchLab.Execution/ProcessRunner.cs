@@ -2,18 +2,28 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.Json;
 using ResearchLab.Application;
+using ResearchLab.Domain;
 
 namespace ResearchLab.Execution;
 
-public sealed class ProcessRunner : IProcessRunner
+public sealed class ProcessRunner(RunLogFiles logs) : IProcessRunner
 {
     private const long OutputLimitBytes = 1024 * 1024;
     private static readonly TimeSpan CleanupTimeout = TimeSpan.FromSeconds(5);
 
-    public async Task<ProcessResult> ExecuteAsync(PreparedRun launch, Func<ProcessStarted, Task> onStarted)
+    public async Task<ProcessResult> ExecuteAsync(RunId runId, PreparedRun launch, Func<ProcessStarted, Task> onStarted)
     {
         ArgumentNullException.ThrowIfNull(launch);
         ArgumentNullException.ThrowIfNull(onStarted);
+        FileStream outputFile;
+        FileStream errorFile;
+        try { (outputFile, errorFile) = logs.Create(runId); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return new(null, false, "Run log files could not be created.");
+        }
+        await using var output = outputFile;
+        await using var error = errorFile;
         // On Windows, batch files can trigger command-processor fallback even with
         // UseShellExecute=false. This increment accepts native .exe entry points only.
         if (OperatingSystem.IsWindows() && !string.Equals(Path.GetExtension(launch.ExecutablePath), ".exe", StringComparison.OrdinalIgnoreCase))
@@ -47,8 +57,8 @@ public sealed class ProcessRunner : IProcessRunner
         using var deadline = new CancellationTokenSource(launch.ExperimentSnapshot.Task.Timeout);
         long outputBytes = 0;
         string? drainFailure = null;
-        var stdout = DrainAsync(process.StandardOutput.BaseStream);
-        var stderr = DrainAsync(process.StandardError.BaseStream);
+        var stdout = DrainAsync(process.StandardOutput.BaseStream, output);
+        var stderr = DrainAsync(process.StandardError.BaseStream, error);
         // Observe exit immediately: a slow acknowledgement must not turn an already
         // completed process/drain into a timeout when WaitForExitAsync is first called.
         var completion = Task.WhenAll(process.WaitForExitAsync(deadline.Token), stdout, stderr);
@@ -80,7 +90,7 @@ public sealed class ProcessRunner : IProcessRunner
             }
         }
 
-        async Task DrainAsync(Stream stream)
+        async Task DrainAsync(Stream stream, Stream destination)
         {
             var buffer = new byte[8192];
             try
@@ -89,17 +99,23 @@ public sealed class ProcessRunner : IProcessRunner
                 int count;
                 while ((count = await stream.ReadAsync(buffer, deadline.Token)) != 0)
                 {
-                    if (Interlocked.Add(ref outputBytes, count) > OutputLimitBytes)
+                    var total = Interlocked.Add(ref outputBytes, count);
+                    var retained = (int)Math.Clamp(OutputLimitBytes - (total - count), 0, count);
+                    if (retained > 0)
+                        // Persist already-read evidence even when the execution deadline fires.
+                        await destination.WriteAsync(buffer.AsMemory(0, retained));
+                    if (total > OutputLimitBytes)
                     {
                         Interlocked.CompareExchange(ref drainFailure, "Process output exceeded the 1 MiB combined limit.", null);
                         deadline.Cancel();
                         return;
                     }
                 }
+                await destination.FlushAsync();
             }
-            catch (IOException)
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                Interlocked.CompareExchange(ref drainFailure, "Process output could not be drained.", null);
+                Interlocked.CompareExchange(ref drainFailure, "Process output could not be read or saved.", null);
                 deadline.Cancel();
             }
         }

@@ -63,7 +63,7 @@ public sealed class RunExecutionTests
         {
             try
             {
-                return await new ProcessRunner().ExecuteAsync(launch, async started =>
+                return await new ProcessRunner(new RunLogFiles(Path.Combine(fixture.Root, "logs"))).ExecuteAsync(RunId.New(), launch, async started =>
                 {
                     owned = Process.GetProcessById(started.ProcessId);
                     await onStarted(started);
@@ -101,7 +101,7 @@ public sealed class RunExecutionTests
         var (catalog, experiment) = await SeedAsync(fixture, "success", timeout: 2);
         await TrustAsync(catalog, experiment);
         var prepared = await new RunPreparation(catalog).PrepareAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
-        var result = await new ProcessRunner().ExecuteAsync(prepared, async started =>
+        var result = await new ProcessRunner(new RunLogFiles(Path.Combine(fixture.Root, "logs"))).ExecuteAsync(RunId.New(), prepared, async started =>
         {
             using var owned = Process.GetProcessById(started.ProcessId);
             await owned.WaitForExitAsync(TestContext.Current.CancellationToken);
@@ -162,15 +162,26 @@ public sealed class RunExecutionTests
         await TrustAsync(catalog, experiment);
         Process? root = null;
         Process? child = null;
-        var runner = new DelegateRunner((launch, onStarted) => new ProcessRunner().ExecuteAsync(launch, async started =>
+        var runner = new DelegateRunner((launch, onStarted) => new ProcessRunner(new RunLogFiles(Path.Combine(fixture.Root, "logs"))).ExecuteAsync(RunId.New(), launch, async started =>
         {
             root = Process.GetProcessById(started.ProcessId);
             await onStarted(started);
             var pidFile = Path.Combine(fixture.Workspace, "synthetic-child.pid");
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            while (!File.Exists(pidFile))
-                await Task.Delay(10, deadline.Token);
-            child = Process.GetProcessById(int.Parse(await File.ReadAllTextAsync(pidFile, deadline.Token), System.Globalization.CultureInfo.InvariantCulture));
+            // File creation precedes completion of the fixture's asynchronous PID write.
+            // Wait for valid contents, not merely existence of a possibly empty file.
+            while (child is null)
+            {
+                try
+                {
+                    if (File.Exists(pidFile) && int.TryParse(await File.ReadAllTextAsync(pidFile, deadline.Token),
+                        System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var childPid))
+                        child = Process.GetProcessById(childPid);
+                }
+                catch (IOException) { } // The writer may still hold the file on Windows.
+                if (child is null)
+                    await Task.Delay(10, deadline.Token);
+            }
         }));
         try
         {
@@ -245,7 +256,7 @@ public sealed class RunExecutionTests
         fixture.WriteConfiguration("broken.exe");
         await File.WriteAllTextAsync(Path.Combine(fixture.Workspace, "broken.exe"), "This is not an executable image.", TestContext.Current.CancellationToken);
         await TrustAsync(catalog, experiment);
-        var service = new RunExecution(fixture.Store, catalog, new WorkspaceInspector(), new ProcessRunner());
+        var service = new RunExecution(fixture.Store, catalog, new WorkspaceInspector(), new ProcessRunner(new RunLogFiles(Path.Combine(fixture.Root, "logs"))));
         var id = await service.StartRunAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
         var run = (await fixture.Store.GetRunAsync(id, TestContext.Current.CancellationToken))!;
         Assert.Equal(RunStatus.Failed, run.Status);
@@ -265,7 +276,7 @@ public sealed class RunExecutionTests
         var (catalog, experiment) = await SeedAsync(fixture, "success");
         fixture.WriteConfiguration("task.cmd");
         await TrustAsync(catalog, experiment);
-        var service = new RunExecution(fixture.Store, catalog, new WorkspaceInspector(), new ProcessRunner());
+        var service = new RunExecution(fixture.Store, catalog, new WorkspaceInspector(), new ProcessRunner(new RunLogFiles(Path.Combine(fixture.Root, "logs"))));
         var id = await service.StartRunAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
         var run = (await fixture.Store.GetRunAsync(id, TestContext.Current.CancellationToken))!;
         Assert.Equal(RunStatus.Failed, run.Status);
@@ -281,7 +292,7 @@ public sealed class RunExecutionTests
         using var fixture = new TestWorkspace();
         var (catalog, experiment) = await SeedAsync(fixture, mode, timeout: mode == "wait" ? 1 : 10);
         await TrustAsync(catalog, experiment);
-        var service = new RunExecution(fixture.Store, catalog, new WorkspaceInspector(), new ProcessRunner());
+        var service = new RunExecution(fixture.Store, catalog, new WorkspaceInspector(), new ProcessRunner(new RunLogFiles(Path.Combine(fixture.Root, "logs"))));
         var id = await service.StartRunAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
         var run = (await fixture.Store.GetRunAsync(id, TestContext.Current.CancellationToken))!;
         Assert.Equal(expected, run.Status);
@@ -317,7 +328,7 @@ public sealed class RunExecutionTests
         Process? owned = null;
         try
         {
-            await Assert.ThrowsAsync<InvalidOperationException>(() => new ProcessRunner().ExecuteAsync(prepared, started =>
+            await Assert.ThrowsAsync<InvalidOperationException>(() => new ProcessRunner(new RunLogFiles(Path.Combine(fixture.Root, "logs"))).ExecuteAsync(RunId.New(), prepared, started =>
             {
                 owned = Process.GetProcessById(started.ProcessId);
                 throw new InvalidOperationException("Synthetic persistence failure.");
@@ -369,6 +380,133 @@ public sealed class RunExecutionTests
         Assert.Null(run.ProcessId);
     }
 
+    [Theory]
+    [InlineData("streams", RunStatus.Succeeded, 524288)]
+    [InlineData("overflow", RunStatus.Failed, 1048576)]
+    [InlineData("fail", RunStatus.Failed, 19)]
+    [InlineData("logged-wait", RunStatus.TimedOut, 40)]
+    public async Task SavedLogsAreBoundedSeparateAndAvailableAfterReload(string mode, RunStatus status, int expectedBytes)
+    {
+        using var fixture = new TestWorkspace();
+        var (catalog, experiment) = await SeedAsync(fixture, mode, timeout: mode == "logged-wait" ? 2 : 10);
+        await TrustAsync(catalog, experiment);
+        var root = Path.Combine(fixture.Root, "logs");
+        var id = await new RunExecution(fixture.Store, catalog, new WorkspaceInspector(), new ProcessRunner(new RunLogFiles(root)))
+            .StartRunAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
+        Assert.Equal(status, (await fixture.Store.GetRunAsync(id, TestContext.Current.CancellationToken))!.Status);
+        var logs = new RunLogs(fixture.Store, new RunLogFiles(root));
+        var paths = (await logs.GetPathsAsync(id, TestContext.Current.CancellationToken))!;
+        Assert.False(Path.IsPathRooted(paths.Stdout));
+        Assert.Equal(id.Value.ToString("N"), Path.GetDirectoryName(paths.Stdout));
+        Assert.NotEqual(paths.Stdout, paths.Stderr);
+        await using var stdout = await logs.OpenReadAsync(id, RunLogStream.Stdout, TestContext.Current.CancellationToken);
+        await using var stderr = await logs.OpenReadAsync(id, RunLogStream.Stderr, TestContext.Current.CancellationToken);
+        // Fixture newlines are platform dependent.
+        if (mode == "streams" || mode == "overflow")
+            Assert.Equal(expectedBytes, stdout.Length + stderr.Length);
+        else
+            Assert.True(stdout.Length + stderr.Length > 0);
+        if (mode == "streams")
+        {
+            Assert.Equal(256 * 1024, stdout.Length);
+            Assert.Equal(256 * 1024, stderr.Length);
+        }
+        if (mode == "fail")
+        {
+            Assert.Equal(0, stdout.Length);
+            using var reader = new StreamReader(stderr);
+            Assert.Equal("Synthetic failure." + Environment.NewLine, await reader.ReadToEndAsync(TestContext.Current.CancellationToken));
+        }
+        await Assert.ThrowsAsync<CatalogException>(() => logs.GetPathsAsync(RunId.New(), TestContext.Current.CancellationToken));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RunLogFiles(root).OpenRead(id, (RunLogStream)123));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LogAllocationFailureDoesNotLaunchOrLeakPaths(bool link)
+    {
+        using var fixture = new TestWorkspace();
+        var (catalog, experiment) = await SeedAsync(fixture, "success");
+        await TrustAsync(catalog, experiment);
+        var root = Path.Combine(fixture.Root, "logs");
+        if (link)
+            await fixture.LinkDirectoryAsync(root, fixture.Workspace);
+        else
+            await File.WriteAllTextAsync(root, "Synthetic obstruction", TestContext.Current.CancellationToken);
+        var id = await new RunExecution(fixture.Store, catalog, new WorkspaceInspector(), new ProcessRunner(new RunLogFiles(root)))
+            .StartRunAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
+        var run = (await fixture.Store.GetRunAsync(id, TestContext.Current.CancellationToken))!;
+        Assert.Equal(RunStatus.Failed, run.Status);
+        Assert.Null(run.ProcessId);
+        Assert.DoesNotContain(fixture.Root, run.FailureReason!);
+        Assert.Empty(Directory.GetFiles(fixture.Workspace, "*.log"));
+    }
+
+    [Fact]
+    public async Task ExistingRunDirectoryAndLinkedAncestorsCannotBeUsed()
+    {
+        using var fixture = new TestWorkspace();
+        var (catalog, experiment) = await SeedAsync(fixture, "success");
+        await TrustAsync(catalog, experiment);
+        var launch = await new RunPreparation(catalog).PrepareAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
+        var id = RunId.New();
+        var root = Path.Combine(fixture.Root, "logs");
+        var directory = Path.Combine(root, id.Value.ToString("N"));
+        Directory.CreateDirectory(directory);
+        var sentinel = Path.Combine(directory, "stdout.log");
+        await File.WriteAllTextAsync(sentinel, "Preserve existing evidence", TestContext.Current.CancellationToken);
+        var runner = new ProcessRunner(new RunLogFiles(root));
+        Assert.NotNull((await runner.ExecuteAsync(id, launch, _ => throw new Exception("Must not start"))).FailureReason);
+        Assert.Equal("Preserve existing evidence", await File.ReadAllTextAsync(sentinel, TestContext.Current.CancellationToken));
+        var alias = Path.Combine(fixture.Root, "alias");
+        await fixture.LinkDirectoryAsync(alias, root);
+        Assert.NotNull((await new ProcessRunner(new RunLogFiles(Path.Combine(alias, "nested")))
+            .ExecuteAsync(RunId.New(), launch, _ => throw new Exception("Must not start"))).FailureReason);
+        Assert.False(Directory.Exists(Path.Combine(root, "nested")));
+        Assert.Throws<IOException>(() => new RunLogFiles(alias).OpenRead(id, RunLogStream.Stdout));
+    }
+
+    [Fact]
+    public async Task OsStartupFailureRetainsEmptyLogFiles()
+    {
+        using var fixture = new TestWorkspace();
+        var (catalog, experiment) = await SeedAsync(fixture, "success");
+        await TrustAsync(catalog, experiment);
+        var launch = await new RunPreparation(catalog).PrepareAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
+        File.Move(launch.ExecutablePath, launch.ExecutablePath + ".unavailable");
+        var id = RunId.New();
+        var logs = new RunLogFiles(Path.Combine(fixture.Root, "logs"));
+        var result = await new ProcessRunner(logs).ExecuteAsync(id, launch, _ => throw new Exception("Must not start"));
+        Assert.Null(result.ExitCode);
+        Assert.NotNull(result.FailureReason);
+        Assert.NotNull(logs.GetPaths(id));
+        using var stdout = logs.OpenRead(id, RunLogStream.Stdout);
+        using var stderr = logs.OpenRead(id, RunLogStream.Stderr);
+        Assert.Equal(0, stdout.Length + stderr.Length);
+    }
+
+    [Fact]
+    public async Task DistinctRunsKeepIndependentLogsAndRejectLinkedLogFiles()
+    {
+        using var fixture = new TestWorkspace();
+        var (catalog, experiment) = await SeedAsync(fixture, "fail");
+        await TrustAsync(catalog, experiment);
+        var root = Path.Combine(fixture.Root, "logs");
+        var files = new RunLogFiles(root);
+        var execution = new RunExecution(fixture.Store, catalog, new WorkspaceInspector(), new ProcessRunner(files));
+        var first = await execution.StartRunAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
+        var second = await execution.StartRunAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
+        Assert.NotEqual(files.GetPaths(first), files.GetPaths(second));
+        Assert.Equal(2, Directory.GetDirectories(root).Length);
+        var linkedId = RunId.New();
+        var directory = Path.Combine(root, linkedId.Value.ToString("N"));
+        Directory.CreateDirectory(directory);
+        await fixture.LinkDirectoryAsync(Path.Combine(directory, "stdout.log"), fixture.Workspace);
+        Assert.Throws<IOException>(() => files.OpenRead(linkedId, RunLogStream.Stdout));
+        Assert.Throws<IOException>(() => files.GetPaths(linkedId));
+    }
+
     private static string ExecutableName => OperatingSystem.IsWindows() ? "ResearchLab.ProcessFixture.exe" : "ResearchLab.ProcessFixture";
 
     private static async Task<(ProjectCatalog, Experiment)> SeedAsync(TestWorkspace fixture, string mode, int timeout = 10)
@@ -403,13 +541,13 @@ public sealed class RunExecutionTests
 
     private sealed class NeverRunner : IProcessRunner
     {
-        public Task<ProcessResult> ExecuteAsync(PreparedRun launch, Func<ProcessStarted, Task> onStarted) =>
+        public Task<ProcessResult> ExecuteAsync(RunId runId, PreparedRun launch, Func<ProcessStarted, Task> onStarted) =>
             throw new InvalidOperationException("Executor must not be reached.");
     }
 
     private sealed class DelegateRunner(Func<PreparedRun, Func<ProcessStarted, Task>, Task<ProcessResult>> execute) : IProcessRunner
     {
-        public Task<ProcessResult> ExecuteAsync(PreparedRun launch, Func<ProcessStarted, Task> onStarted) => execute(launch, onStarted);
+        public Task<ProcessResult> ExecuteAsync(RunId runId, PreparedRun launch, Func<ProcessStarted, Task> onStarted) => execute(launch, onStarted);
     }
 
     private sealed class ChangingInspector(Func<Task> change) : IWorkspaceInspector
@@ -429,13 +567,13 @@ public sealed class RunExecutionTests
     {
         public RunStatus? StatusAfterStart { get; private set; }
 
-        public async Task<ProcessResult> ExecuteAsync(PreparedRun launch, Func<ProcessStarted, Task> onStarted)
+        public async Task<ProcessResult> ExecuteAsync(RunId runId, PreparedRun launch, Func<ProcessStarted, Task> onStarted)
         {
             await using var db = Open(fixture);
             var created = Assert.Single(await db.Set<Run>().AsNoTracking().ToListAsync(TestContext.Current.CancellationToken));
             Assert.Equal(RunStatus.Created, created.Status);
             Assert.Null(created.ProcessId);
-            return await new ProcessRunner().ExecuteAsync(launch, async started =>
+            return await new ProcessRunner(new RunLogFiles(Path.Combine(fixture.Root, "logs"))).ExecuteAsync(RunId.New(), launch, async started =>
             {
                 await onStarted(started);
                 var runs = await db.Set<Run>().AsNoTracking().ToListAsync(TestContext.Current.CancellationToken);

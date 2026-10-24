@@ -1,3 +1,5 @@
+using ResearchLab.Domain;
+
 namespace ResearchLab.Application;
 
 public sealed record ProcessStarted(int ProcessId, DateTimeOffset StartedAtUtc);
@@ -9,5 +11,5 @@ public interface IProcessRunner
 {
     // Invoke onStarted only after OS startup; await it before reporting completion.
     // If it throws, stop the owned process and propagate the error, never relaunch.
-    Task<ProcessResult> ExecuteAsync(PreparedRun launch, Func<ProcessStarted, Task> onStarted);
+    Task<ProcessResult> ExecuteAsync(RunId runId, PreparedRun launch, Func<ProcessStarted, Task> onStarted);
 }

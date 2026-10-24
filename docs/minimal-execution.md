@@ -8,9 +8,13 @@ var inspector = new WorkspaceInspector();
 var catalog = new ProjectCatalog(store, inspector);
 // Import/create Experiment, display ReviewTaskAsync, then explicitly ConfirmTaskAsync
 // after the local owner's approval. Keep this same catalog instance.
-var execution = new RunExecution(store, catalog, inspector, new ProcessRunner());
+var logFiles = new RunLogFiles(privateLogRoot); // Host-controlled absolute storage root
+var execution = new RunExecution(store, catalog, inspector, new ProcessRunner(logFiles));
 var runId = await execution.StartRunAsync(experimentId, parameters, cancellationToken);
 var run = await store.GetRunAsync(runId, cancellationToken);
+var logs = new RunLogs(store, logFiles);
+var paths = await logs.GetPathsAsync(runId, cancellationToken);
+await using var stdout = await logs.OpenReadAsync(runId, RunLogStream.Stdout, cancellationToken);
 ```
 
 The caller composes existing Application/Infrastructure components and
@@ -51,7 +55,7 @@ declared interpreter executables remain code the owner must review.
 Validated scalar parameters are passed as UTF-8-compatible JSON text through
 `RESEARCHLAB_PARAMETERS_JSON`, without command interpolation. Inherited stdin is replaced
 with closed redirected input. stdout/stderr are drained concurrently using fixed buffers,
-discarded and never stored. A fixed 1 MiB combined byte cap terminates excessive output as
+saved separately as raw bytes. A fixed 1 MiB combined byte cap terminates excessive output as
 Failed. The configured timeout bounds execution/draining and produces TimedOut after
 termination. Cleanup attempts process-tree termination and waits up to five seconds for
 the root process; inability to stop is surfaced, never claimed as a successful completion.
@@ -62,8 +66,8 @@ combined exit/drain tasks to five seconds, including when process termination th
 
 CancellationToken is used only up to initial insertion. Once Created is persisted the
 workflow owns execution and state writes until completion; canceling the calling request
-does not implement CancelRun. No advanced cancellation, background work, log storage,
-output/artifact directory allocation, run-history listing or restart reconciliation is
+does not implement CancelRun. No advanced cancellation, background work, M4 artifact directory allocation,
+run-history listing or restart reconciliation is
 implemented. The inherited environment is not sandboxed. Filesystem TOCTOU races and
 the crash window between OS start and saved Running remain as described in the lifecycle
 design. Descendant cleanup after the root has already exited is not guaranteed; this
@@ -76,3 +80,28 @@ both output streams, timeout, output limits and callback-failure cleanup.
 Regression tests also cover executor exceptions before/after startup, real SQLite write
 failures at startup/completion, delayed acknowledgement, final trust-read failure,
 incomplete results, and timeout cleanup of a live root with a child inheriting both pipes.
+
+## M3 bounded log retention
+
+The host supplies a private RunLogFiles root outside the imported workspace; neither task
+configuration nor stdout selects this path. IProcessRunner receives the persisted RunId
+from Application. Handoff creates `<RunId:N>/stdout.log` and `stderr.log` before OS startup.
+Trust failures before handoff have no logs. Allocation failure prevents startup and records
+Failed with no private paths. Existing attempt directories are rejected and files are never
+overwritten. No database migration is needed: paths are derived from RunId.
+
+Retention is capped at 1 MiB combined per Run; stream shares depend on read arrival order.
+Each drain uses an 8192-byte buffer, never accumulating all output. Overflow still stops
+the process as Failed, retaining bounded stream prefixes. Nonzero exit, timeout and failed
+startup acknowledgement do not delete collected bytes. Disk failure leaves partial logs
+and cannot report success. Host crashes may lose buffered tail bytes; no fsync/power-loss
+durability guarantee is added.
+
+RunLogs checks the Run exists in the store. GetPathsAsync returns relative paths; OpenReadAsync
+accepts only RunId and the Stdout/Stderr enum, never arbitrary paths or filenames. Older Runs
+without a directory return null; reading a missing file raises a filesystem error. Creation
+and reads reject reparse points/symlinks/junctions in files, Run directories, the root and
+its ancestors. Concurrent replacement between validation and open remains a TOCTOU limitation
+of trusted local storage, not protection against a hostile process with write access to the
+root/ancestors. The host must restrict those permissions. No new output environment variable
+is passed to the child; RESEARCHLAB_PARAMETERS_JSON is unchanged. This is not M4 Artifact Storage.
