@@ -4,6 +4,8 @@ using System.Text.Json;
 // Synthetic subprocess fixture for integration tests, not a ResearchLab CLI or sample evidence.
 switch (args.FirstOrDefault())
 {
+    case "owner-session":
+        return await HoldOwnershipAsync(args);
     case "success":
         return 0;
     case "fail":
@@ -41,6 +43,30 @@ switch (args.FirstOrDefault())
         return 0;
     default:
         return 10;
+}
+
+static async Task<int> HoldOwnershipAsync(string[] arguments)
+{
+    var store = new ResearchLab.Infrastructure.Persistence.SqliteResearchStore(arguments[1]);
+    var experiment = (await store.GetExperimentAsync(new ResearchLab.Domain.ExperimentId(Guid.Parse(arguments[2]))))!;
+    using var session = store.OpenRunSession();
+    var now = DateTimeOffset.UtcNow;
+    var run = ResearchLab.Domain.Run.Create(ResearchLab.Domain.RunId.New(), experiment,
+        new ResearchLab.Domain.TaskSnapshot("benchmark", "synthetic-owner", [], TimeSpan.FromSeconds(30)),
+        new Dictionary<string, ResearchLab.Domain.ParameterValue>(),
+        new ResearchLab.Domain.SourceSnapshot(null, null, null),
+        new ResearchLab.Domain.EnvironmentSnapshot("synthetic", "synthetic", new Dictionary<string, string>()), now);
+    await session.AddRunAsync(run);
+    if (arguments[3] == "Running")
+    {
+        run.Start(now, Environment.ProcessId, run.Version);
+        await store.SaveRunAsync(run, 0);
+    }
+    Console.WriteLine(run.Id.Value);
+    await Console.Out.FlushAsync();
+    // Synthetic owner: the test kills this process to verify OS release after a real crash.
+    await Task.Delay(Timeout.InfiniteTimeSpan);
+    return 0;
 }
 
 static async Task WriteAsync(TextWriter writer, int length)

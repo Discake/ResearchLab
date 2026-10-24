@@ -33,6 +33,8 @@ public sealed partial class RunExecutionTests
             Assert.False(driver.IsCompleted);
             Assert.All(Enumerable.Range(0, 20), _ => Assert.Same(driver, operation.ExecuteAsync()));
             Assert.Equal(RunStatus.Running, (await fixture.Store.GetRunAsync(operation.RunId, TestContext.Current.CancellationToken))!.Status);
+            Assert.Empty((await new RunRecovery(fixture.Store).RecoverAsync(TestContext.Current.CancellationToken)).Recovered);
+            Assert.Throws<InvalidOperationException>(() => operation.Dispose());
             for (var index = 0; index < 20; index++)
                 Assert.True(operation.RequestCancellation());
             Assert.False(process.HasExited); // Request intent is not a terminal fact.
@@ -151,6 +153,8 @@ public sealed partial class RunExecutionTests
             Assert.Equal(RunStatus.Running, active.Status);
             Assert.Null(active.FinishedAtUtc);
             Assert.Equal(1, active.Version);
+            Assert.Empty((await new RunRecovery(fixture.Store).RecoverAsync(TestContext.Current.CancellationToken)).Recovered);
+            Assert.Throws<InvalidOperationException>(() => operation.Dispose());
             operation.RequestCancellation();
             await error.Operation!.ExecuteAsync().WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
             Assert.True(process.HasExited);

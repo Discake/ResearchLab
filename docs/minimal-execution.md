@@ -74,8 +74,8 @@ For explicit cancellation use PrepareRunAsync and retain its RunOperation: Execu
 the attempt, WaitAsync(token) cancels only waiting, and RequestCancellation requests stopping.
 See the managed cancellation contract for races, retries and confirmation requirements.
 Run details and paged history reads are implemented through [RunHistory](run-history.md).
-Background execution, M4 artifact directory allocation and restart
-reconciliation are not implemented.
+Background execution and M4 artifact directory allocation are not implemented.
+Explicit recovery now follows [M3.3 local recovery](run-recovery.md).
 
 The inherited environment is not sandboxed. Filesystem TOCTOU races and
 the crash window between OS start and saved Running remain as described in the lifecycle

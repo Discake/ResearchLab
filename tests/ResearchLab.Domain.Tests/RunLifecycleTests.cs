@@ -13,6 +13,7 @@ public sealed class RunLifecycleTests
                 (RunStatus.Created, RunStatus.Running),
                 (RunStatus.Created, RunStatus.Failed),
                 (RunStatus.Created, RunStatus.Canceled),
+                (RunStatus.Created, RunStatus.Interrupted),
                 (RunStatus.Running, RunStatus.Succeeded),
                 (RunStatus.Running, RunStatus.Failed),
                 (RunStatus.Running, RunStatus.Canceled),
@@ -45,6 +46,24 @@ public sealed class RunLifecycleTests
                 Move(run, to, DomainFixtures.Epoch.AddSeconds(30))).Code);
             Assert.Equal(before, (run.Status, run.Version, run.StartedAtUtc, run.FinishedAtUtc, run.ProcessId, run.ExitCode, run.FailureReason));
         }
+    }
+
+    [Fact]
+    public void InterruptedCreatedPreservesUnknownStartupAndRequiresValidRecoveryMetadata()
+    {
+        var run = DomainFixtures.Run();
+        Assert.Throws<DomainException>(() => run.Interrupt(DomainFixtures.Epoch, " ", run.Version));
+        Assert.Throws<DomainException>(() => run.Interrupt(DomainFixtures.Epoch.AddSeconds(-1), "Owner lost", run.Version));
+        Assert.Equal(0, run.Version);
+        run.Interrupt(DomainFixtures.Epoch.AddSeconds(10), "Owner ended; startup outcome unknown", 0);
+        Assert.Equal(RunStatus.Interrupted, run.Status);
+        Assert.Equal(1, run.Version);
+        Assert.Null(run.ProcessId);
+        Assert.Null(run.StartedAtUtc);
+        Assert.Null(run.ExitCode);
+        Assert.Null(run.Duration);
+        Assert.Equal("Owner ended; startup outcome unknown", run.FailureReason);
+        Assert.Throws<DomainException>(() => run.Interrupt(DomainFixtures.Epoch.AddSeconds(11), "Repeat", 0));
     }
 
     [Fact]

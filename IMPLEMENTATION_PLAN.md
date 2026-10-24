@@ -81,7 +81,7 @@ Implement:
 - Project + Experiment with `TaskKey` and typed parameter definitions.
 - Parameter validation (required/default, numeric range, allowed values, unsupported type).
 - Run with immutable parameters, experiment/task snapshot, source/environment snapshot.
-- RunStatus state machine: Created → Running → Succeeded/Failed/Canceled/TimedOut/Interrupted; Created → Failed/Canceled (startup failure must not imply Running).
+- RunStatus state machine: Created → Running → Succeeded/Failed/Canceled/TimedOut/Interrupted; Created → Failed/Canceled. M3.3 adds Created → Interrupted for verified owner loss without inventing startup evidence (startup failure must not imply Running).
 - MetricPoint: finite numeric value, name, unit, optional step, ingestion order.
 - Domain errors with clear reasons; no repository/network dependencies.
 
@@ -123,7 +123,7 @@ Implement:
 - `StartRun(experimentId, parameters)` application use case with validation and frozen launch snapshots.
 - Process runner with `ProcessStartInfo.ArgumentList`; `UseShellExecute=false`, working directory and dedicated output directory.
 - Concurrent stdout/stderr draining; bounded logs; robust cancellation, timeout, process-tree termination and exit-code handling.
-- State persistence and crash recovery: stale Running → Interrupted.
+- State persistence and crash recovery: Created/Running of verified ended owner sessions → Interrupted; skip active/unknown owners. Implemented M3.3 contract: [EN](docs/run-recovery.md) / [RU](docs/run-recovery.ru.md).
 - List/detail of Runs with timestamps, exit codes and failure diagnostics.
 - A small sample executable for success, failure, slow run and log output.
 

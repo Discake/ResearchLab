@@ -95,7 +95,8 @@ prove that all descendants have exited; detached children or descendants after a
 exited root are not guaranteed stopped. This contract does not add OS job objects or claim
 process isolation. A host must retain ownership and address cleanup failures explicitly;
 request cancellation never disposes the owner or cancels mandatory status writes.
-Host crashes and ambiguous startup/recovery windows remain as in the lifecycle design.
+M3.3 [local recovery](run-recovery.md) now records verified ownership loss as Interrupted,
+including ambiguous Created startup. It does not confirm or terminate orphan children.
 
 Tests use real synthetic fixture processes and SQLite. They cover canceled waiting with a
 live retained owner, long-process cancellation, late cancel after natural exit, both orders

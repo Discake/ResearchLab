@@ -107,6 +107,7 @@ public sealed class Run
         Finish(RunStatus.TimedOut, at, null, "Configured execution timeout exceeded.");
     }
 
+    // Application must verify durable ownership loss; this is not evidence of OS process exit.
     public void Interrupt(DateTimeOffset at, string reason, long expectedVersion)
     {
         CheckTransition(RunStatus.Interrupted, at, expectedVersion);
@@ -141,7 +142,7 @@ public sealed class Run
         CheckVersion(expectedVersion);
         var allowed = Status switch
         {
-            RunStatus.Created => next is RunStatus.Running or RunStatus.Failed or RunStatus.Canceled,
+            RunStatus.Created => next is RunStatus.Running or RunStatus.Failed or RunStatus.Canceled or RunStatus.Interrupted,
             RunStatus.Running => next is RunStatus.Succeeded or RunStatus.Failed or RunStatus.Canceled
                 or RunStatus.TimedOut or RunStatus.Interrupted,
             _ => false

@@ -140,6 +140,9 @@ namespace ResearchLab.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("FinishedAtUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("OwnerSessionId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ParametersSnapshot")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -167,6 +170,8 @@ namespace ResearchLab.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ExperimentKey");
+
+                    b.HasIndex("OwnerSessionId", "Status");
 
                     b.ToTable("Runs", (string)null);
                 });

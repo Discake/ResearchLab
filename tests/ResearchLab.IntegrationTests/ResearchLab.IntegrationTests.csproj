@@ -12,8 +12,8 @@
   </ItemGroup>
   <Target Name="CopyProcessFixture" AfterTargets="Build">
     <ItemGroup>
-      <ProcessFixtureFiles Include="$(MSBuildThisFileDirectory)../ResearchLab.ProcessFixture/bin/$(Configuration)/$(TargetFramework)/*" />
+      <ProcessFixtureFiles Include="$(MSBuildThisFileDirectory)../ResearchLab.ProcessFixture/bin/$(Configuration)/$(TargetFramework)/**/*" />
     </ItemGroup>
-    <Copy SourceFiles="@(ProcessFixtureFiles)" DestinationFolder="$(OutDir)ProcessFixture" />
+    <Copy SourceFiles="@(ProcessFixtureFiles)" DestinationFiles="@(ProcessFixtureFiles->'$(OutDir)ProcessFixture/%(RecursiveDir)%(Filename)%(Extension)')" />
   </Target>
 </Project>

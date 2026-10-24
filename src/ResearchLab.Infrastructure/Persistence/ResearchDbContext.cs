@@ -44,6 +44,8 @@ public sealed class ResearchDbContext(DbContextOptions<ResearchDbContext> option
         runs.Property(value => value.EnvironmentSnapshot).HasConversion(value => SnapshotJson.WriteEnvironment(value), value => SnapshotJson.ReadEnvironment(value)).IsRequired();
         runs.Property(value => value.Status);
         runs.Property(value => value.Version).IsConcurrencyToken();
+        runs.Property<Guid?>("OwnerSessionId");
+        runs.HasIndex("OwnerSessionId", nameof(Run.Status));
         runs.Property(value => value.CreatedAtUtc);
         runs.Property(value => value.StartedAtUtc);
         runs.Property(value => value.FinishedAtUtc);

@@ -5,13 +5,17 @@ using ResearchLab.Domain;
 
 namespace ResearchLab.Infrastructure.Persistence;
 
-public sealed class SqliteResearchStore : IResearchStore
+public sealed partial class SqliteResearchStore : IResearchStore, IRunSessionStore
 {
     private readonly DbContextOptions<ResearchDbContext> options;
+    private readonly string sessionRoot;
+    private readonly string databaseFile;
 
     public SqliteResearchStore(string databasePath)
     {
         var path = Path.GetFullPath(databasePath);
+        databaseFile = path;
+        sessionRoot = path + ".sessions";
         var connection = new SqliteConnectionStringBuilder { DataSource = path, ForeignKeys = true, Pooling = false };
         options = new DbContextOptionsBuilder<ResearchDbContext>().UseSqlite(connection.ToString()).Options;
     }
@@ -64,7 +68,10 @@ public sealed class SqliteResearchStore : IResearchStore
         return await db.Set<Experiment>().AsNoTracking().Where(value => value.ProjectId == projectId).OrderBy(value => value.Id).ToListAsync(cancellationToken);
     }
 
-    public async Task AddRunAsync(Run run, CancellationToken cancellationToken = default)
+    public Task AddRunAsync(Run run, CancellationToken cancellationToken = default) =>
+        AddRunCoreAsync(run, null, cancellationToken);
+
+    private async Task AddRunCoreAsync(Run run, Guid? ownerSessionId, CancellationToken cancellationToken)
     {
         if (run.Status != RunStatus.Created || run.Version != 0)
             throw new CatalogException("RunMustBeCreated", "Persist a new Run before recording execution.");
@@ -74,6 +81,7 @@ public sealed class SqliteResearchStore : IResearchStore
             throw new CatalogException("ExperimentNotFound", "Run must belong to a persisted experiment in the same project.");
         db.Add(run);
         db.Entry(run).Property("ExperimentKey").CurrentValue = run.ExperimentId;
+        db.Entry(run).Property("OwnerSessionId").CurrentValue = ownerSessionId;
         await db.SaveChangesAsync(cancellationToken);
     }
 

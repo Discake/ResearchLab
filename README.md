@@ -3,7 +3,7 @@
 Local-first research platform connecting source code, experiment runs, recorded
 evidence and publishable Research Stories. This repository currently implements
 **M0–M2: bootstrap, domain core, SQLite persistence and local project import**.
-M3 also includes preparation and minimal trusted local execution. The application API
+M3 also includes preparation, trusted foreground execution, managed cancellation and local recovery. The application API
 is usable from .NET code; a runnable host/UI is not implemented yet.
 
 ## Prerequisites and verification
@@ -50,7 +50,7 @@ dotnet ef migrations has-pending-model-changes --project src/ResearchLab.Infrast
 | `src/ResearchLab.Execution` | Minimal bounded local ProcessRunner | Application |
 | `tests/ResearchLab.Domain.Tests` | Domain invariants and architecture smoke test | Domain |
 | `tests/ResearchLab.IntegrationTests` | Persistence, import, trust, paths, Git and process execution | Infrastructure, Execution |
-| `tests/ResearchLab.ProcessFixture` | Synthetic subprocess for execution tests | None |
+| `tests/ResearchLab.ProcessFixture` | Synthetic subprocess and crash owner for tests | Infrastructure |
 
 Domain and Application have no NuGet dependencies. Infrastructure uses EF Core
 SQLite 10.0.12, plus its design-time package for migrations. The smoke test loads the built
@@ -90,7 +90,9 @@ See [execution API and limitations](docs/minimal-execution.md) /
 retained per Run and available through Application.
 Run details and bounded history pages are available through Application:
 [RunHistory API](docs/run-history.md) / [чтение истории Run](docs/run-history.ru.md).
-M4 artifact storage and recovery remain future increments.
+M3.3 adds explicit, idempotent recovery of Created/Running from verified ended owner sessions:
+[recovery contract](docs/run-recovery.md) / [контракт восстановления](docs/run-recovery.ru.md).
+Active and unknown owners are skipped; no process is killed. M4 artifact storage remains a future increment.
 
 ## Кратко по-русски
 
@@ -98,6 +100,8 @@ M4 artifact storage and recovery remain future increments.
 и явное подтверждение доверия. M3 дополнен подготовкой и минимальным доверенным исполнением
 с сохранением состояний Run и раздельных ограниченных логов stdout/stderr.
 Доступ к логам, деталям Run и страницам истории предоставляется через Application.
+M3.3 восстанавливает Created/Running подтверждённо завершённых сеансов в Interrupted;
+активные/неизвестные владельцы не затрагиваются, процессы не завершаются.
 API доступен из .NET; UI пока нет.
 Нужен SDK 10.0.401 (допускаются более новые патчи 10.0.4xx) и доступ к NuGet.
 Команды проверки приведены выше; предупреждения сборки считаются ошибками.
