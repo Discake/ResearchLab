@@ -81,7 +81,7 @@ Implement:
 - Project + Experiment with `TaskKey` and typed parameter definitions.
 - Parameter validation (required/default, numeric range, allowed values, unsupported type).
 - Run with immutable parameters, experiment/task snapshot, source/environment snapshot.
-- RunStatus state machine: Created → Running → Succeeded/Failed/Canceled/TimedOut/Interrupted; Created → Canceled.
+- RunStatus state machine: Created → Running → Succeeded/Failed/Canceled/TimedOut/Interrupted; Created → Failed/Canceled (startup failure must not imply Running).
 - MetricPoint: finite numeric value, name, unit, optional step, ingestion order.
 - Domain errors with clear reasons; no repository/network dependencies.
 

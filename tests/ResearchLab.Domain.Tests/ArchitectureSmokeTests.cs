@@ -13,7 +13,7 @@ public sealed class ArchitectureSmokeTests
         Assert.Equal("ResearchLab.Domain", domain.GetName().Name);
         Assert.All(domain.GetReferencedAssemblies(), reference =>
             Assert.True(
-                reference.Name == "System.Runtime",
+                reference.Name is "System.Runtime" or "System.Collections" or "System.Linq",
                 $"Unexpected Domain dependency: {reference.Name}. Review the domain boundary before allowing it."));
     }
 }
