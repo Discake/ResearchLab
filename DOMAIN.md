@@ -109,18 +109,19 @@ Created ───────→ Running ───────→ Succeeded
     │               ├───────────→ Canceled
     │               ├───────────→ TimedOut
     │               └───────────→ Interrupted
+    ├───────────→ Failed
     └───────────→ Canceled
 ```
 
 - `Created`: validated and persisted; execution has not yet started.
 - `Running`: OS process started, with recorded start time and process identity.
 - `Succeeded`: process exited with code `0` and required collection/validation completed.
-- `Failed`: launch failed, process exited nonzero, or essential result processing failed.
+- `Failed`: launch failed before the OS process started (`Created → Failed`), the running process exited nonzero, or essential result processing failed (`Running → Failed`).
 - `Canceled`: explicit cancellation requested and completion confirmed; may happen before start.
 - `TimedOut`: run exceeded its configured limit and was terminated.
 - `Interrupted`: execution service stopped/crashed before recording a normal terminal outcome; determined on recovery.
 
-A terminal status cannot transition again. Use optimistic concurrency/version checks to avoid conflicting terminal updates. Crash recovery may reconcile a stale `Running` record as `Interrupted`. No transparent automatic retries in MVP.
+A process-start failure must not be represented as `Running`: only transition to `Running` after successful process start. A terminal status cannot transition again. Use optimistic concurrency/version checks to avoid conflicting terminal updates. Crash recovery may reconcile a stale `Running` record as `Interrupted`. No transparent automatic retries in MVP.
 
 ## 6. Execution contract (MVP)
 
