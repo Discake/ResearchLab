@@ -4,7 +4,7 @@ Local-first research platform connecting source code, experiment runs, recorded
 evidence and publishable Research Stories. This repository currently implements
 **M0–M2: bootstrap, domain core, SQLite persistence and local project import**.
 M3 also includes preparation, trusted foreground execution, managed cancellation and local recovery. The application API
-is usable from .NET code; a runnable host/UI is not implemented yet.
+is usable from .NET code and a minimal read-only console host. A UI is not implemented yet.
 
 ## Prerequisites and verification
 
@@ -40,6 +40,52 @@ dotnet tool restore
 dotnet ef migrations has-pending-model-changes --project src/ResearchLab.Infrastructure
 ```
 
+## Read existing data from the console
+
+Build first using the commands above, then display help:
+
+```powershell
+dotnet run --no-build --project src/ResearchLab.Cli -- --help
+```
+
+The following PowerShell examples use an **existing ResearchLab database** containing
+at least one project, experiment and Run. Set the two paths to your own existing storage;
+no example database is shipped or created by the CLI. `--data-dir` is exactly the private
+log root previously supplied to `RunLogFiles`, with no added subdirectory.
+These four commands are exercised against synthetic SQLite data by subprocess tests.
+
+```powershell
+$db = 'C:\ResearchLabData\research.db'
+$dataDir = 'C:\ResearchLabData\logs'
+
+$projects = dotnet run --no-build --project src/ResearchLab.Cli -- --database "$db" --data-dir "$dataDir" project list | ConvertFrom-Json
+$projects
+$projectId = $projects[0].id
+
+$experiments = dotnet run --no-build --project src/ResearchLab.Cli -- --database "$db" --data-dir "$dataDir" experiment list --project $projectId | ConvertFrom-Json
+$experiments
+$experimentId = $experiments[0].id
+
+$runs = dotnet run --no-build --project src/ResearchLab.Cli -- --database "$db" --data-dir "$dataDir" run list --experiment $experimentId --offset 0 --page-size 25 | ConvertFrom-Json
+$runs
+$runId = $runs[0].id
+
+dotnet run --no-build --project src/ResearchLab.Cli -- --database "$db" --data-dir "$dataDir" run show $runId
+```
+
+Lists return JSON arrays (`[]` is a successful empty list); show returns a JSON object,
+including safe diagnostics and known relative log paths. Run history is paged by Application
+(50 items by default, maximum 100). Errors go to stderr: exit codes are 0 success, 2 usage,
+3 missing record, 4 storage/data error, 130 canceled, 1 unexpected failure. In PowerShell,
+inspect `$LASTEXITCODE` after invoking the program. SQLite is opened read-only: the host
+does not initialize/migrate databases, create owner sessions, recover Runs or execute tasks.
+There is no `run start` command. The equivalent built executable is
+`src/ResearchLab.Cli/bin/Debug/net10.0/researchlab.exe` on Windows, or use
+`dotnet src/ResearchLab.Cli/bin/Debug/net10.0/researchlab.dll` with the same arguments.
+
+See [console contract](docs/console-host.md) / [контракт консольного host](docs/console-host.ru.md)
+for configuration, data safety and exit codes.
+
 ## Structure and dependency boundaries
 
 | Project | Responsibility | Project dependencies |
@@ -48,8 +94,9 @@ dotnet ef migrations has-pending-model-changes --project src/ResearchLab.Infrast
 | `src/ResearchLab.Application` | Catalog, preparation/execution use cases, session consent and boundary interfaces | Domain |
 | `src/ResearchLab.Infrastructure` | EF Core/SQLite, migrations, filesystem/configuration and bounded Git inspection | Application, Domain |
 | `src/ResearchLab.Execution` | Minimal bounded local ProcessRunner | Application |
+| `src/ResearchLab.Cli` | Read-only console adapter and composition root | Application, Infrastructure, Execution |
 | `tests/ResearchLab.Domain.Tests` | Domain invariants and architecture smoke test | Domain |
-| `tests/ResearchLab.IntegrationTests` | Persistence, import, trust, paths, Git and process execution | Infrastructure, Execution |
+| `tests/ResearchLab.IntegrationTests` | Persistence, import, trust, paths, Git, execution and console reads | Infrastructure, Execution, Cli |
 | `tests/ResearchLab.ProcessFixture` | Synthetic subprocess and crash owner for tests | Infrastructure |
 
 Domain and Application have no NuGet dependencies. Infrastructure uses EF Core
@@ -102,7 +149,11 @@ Active and unknown owners are skipped; no process is killed. M4 artifact storage
 Доступ к логам, деталям Run и страницам истории предоставляется через Application.
 M3.3 восстанавливает Created/Running подтверждённо завершённых сеансов в Interrupted;
 активные/неизвестные владельцы не затрагиваются, процессы не завершаются.
-API доступен из .NET; UI пока нет.
+API доступен из .NET и консольного host только для чтения; UI пока нет.
+Команды `project list`, `experiment list --project <id>`, `run list --experiment <id>`
+и `run show <id>` требуют явных `--database` и `--data-dir`. БД открывается read-only,
+без миграций, recovery и запуска задач. Проверенные примеры PowerShell приведены выше;
+подставьте существующие пути. Синтетические БД создаются только тестами.
 Нужен SDK 10.0.401 (допускаются более новые патчи 10.0.4xx) и доступ к NuGet.
 Команды проверки приведены выше; предупреждения сборки считаются ошибками.
 Тесты проверяют параметры, снимки Run, переходы состояний, версии и метрики.

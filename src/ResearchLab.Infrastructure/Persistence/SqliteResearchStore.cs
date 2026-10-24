@@ -11,12 +11,18 @@ public sealed partial class SqliteResearchStore : IResearchStore, IRunSessionSto
     private readonly string sessionRoot;
     private readonly string databaseFile;
 
-    public SqliteResearchStore(string databasePath)
+    public SqliteResearchStore(string databasePath, bool readOnly = false)
     {
         var path = Path.GetFullPath(databasePath);
         databaseFile = path;
         sessionRoot = path + ".sessions";
-        var connection = new SqliteConnectionStringBuilder { DataSource = path, ForeignKeys = true, Pooling = false };
+        var connection = new SqliteConnectionStringBuilder
+        {
+            DataSource = path,
+            ForeignKeys = true,
+            Pooling = false,
+            Mode = readOnly ? SqliteOpenMode.ReadOnly : SqliteOpenMode.ReadWriteCreate
+        };
         options = new DbContextOptionsBuilder<ResearchDbContext>().UseSqlite(connection.ToString()).Options;
     }
 

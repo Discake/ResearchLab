@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>researchlab</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ResearchLab.Application/ResearchLab.Application.csproj" />
+    <ProjectReference Include="../ResearchLab.Infrastructure/ResearchLab.Infrastructure.csproj" />
+    <ProjectReference Include="../ResearchLab.Execution/ResearchLab.Execution.csproj" />
+  </ItemGroup>
+</Project>
