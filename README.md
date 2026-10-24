@@ -3,7 +3,8 @@
 Local-first research platform connecting source code, experiment runs, recorded
 evidence and publishable Research Stories. This repository currently implements
 **M0–M2: bootstrap, domain core, SQLite persistence and local project import**.
-The application API is usable from .NET code; a runnable host/UI is not implemented yet.
+M3 also includes preparation and minimal trusted local execution. The application API
+is usable from .NET code; a runnable host/UI is not implemented yet.
 
 ## Prerequisites and verification
 
@@ -44,10 +45,12 @@ dotnet ef migrations has-pending-model-changes --project src/ResearchLab.Infrast
 | Project | Responsibility | Project dependencies |
 | --- | --- | --- |
 | `src/ResearchLab.Domain` | Project, Experiment, parameters, Run snapshots/lifecycle and metrics | None |
-| `src/ResearchLab.Application` | Import/catalog/experiment use cases, session consent and boundary interfaces | Domain |
+| `src/ResearchLab.Application` | Catalog, preparation/execution use cases, session consent and boundary interfaces | Domain |
 | `src/ResearchLab.Infrastructure` | EF Core/SQLite, migrations, filesystem/configuration and bounded Git inspection | Application, Domain |
+| `src/ResearchLab.Execution` | Minimal bounded local ProcessRunner | Application |
 | `tests/ResearchLab.Domain.Tests` | Domain invariants and architecture smoke test | Domain |
-| `tests/ResearchLab.IntegrationTests` | Persistence, concurrency, import, trust, paths and Git | Infrastructure |
+| `tests/ResearchLab.IntegrationTests` | Persistence, import, trust, paths, Git and process execution | Infrastructure, Execution |
+| `tests/ResearchLab.ProcessFixture` | Synthetic subprocess for execution tests | None |
 
 Domain and Application have no NuGet dependencies. Infrastructure uses EF Core
 SQLite 10.0.12, plus its design-time package for migrations. The smoke test loads the built
@@ -57,10 +60,9 @@ or web frameworks. It checks emitted assembly references, not unused project/pac
 references. No execution, filesystem or network operations occur in Domain.
 
 The smaller initial structure is explicitly allowed by `IMPLEMENTATION_PLAN.md`.
-Execution and Web will be introduced when their stages need them:
-Execution will reference Application and Domain; Web will compose the
+Execution references Application; Web remains deferred and will compose the
 adapters and calls Application use cases. Domain must never reference outer layers.
-No task process runner or UI is included. Git inspection launches only the host Git
+No UI is included. Git inspection launches only the host Git
 CLI, never a declared research task; repository fsmonitor and external filters are disabled.
 CI automation is deferred; the commands above are the local verification baseline.
 
@@ -82,13 +84,16 @@ persistence. See [M2 API usage and configuration](docs/persistence-import.md) /
 [M2: использование API и конфигурация](docs/persistence-import.ru.md).
 Import never executes project commands. Consent is explicit and session-local.
 
-Next: **M3 — local execution and Run history**: connect the consent boundary to a
-bounded process runner, collect stdout/stderr and persist lifecycle/recovery events.
+M3 now includes a minimal trusted ProcessRunner and persisted startup/completion states.
+See [execution API and limitations](docs/minimal-execution.md) /
+[исполнение и ограничения](docs/minimal-execution.ru.md). Advanced cancellation, stored
+logs, output/artifact directories, history listing and recovery remain future increments.
 
 ## Кратко по-русски
 
 Реализованы M0–M2: доменное ядро, SQLite/EF Core, импорт, каталог экспериментов
-и явное подтверждение доверия. API доступен из .NET; исполнителя задач и UI пока нет.
+и явное подтверждение доверия. M3 дополнен подготовкой и минимальным доверенным исполнением
+с сохранением состояний Run. API доступен из .NET; UI пока нет.
 Нужен SDK 10.0.401 (допускаются более новые патчи 10.0.4xx) и доступ к NuGet.
 Команды проверки приведены выше; предупреждения сборки считаются ошибками.
 Тесты проверяют параметры, снимки Run, переходы состояний, версии и метрики.

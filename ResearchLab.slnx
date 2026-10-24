@@ -3,8 +3,10 @@
     <Project Path="src/ResearchLab.Domain/ResearchLab.Domain.csproj" />
     <Project Path="src/ResearchLab.Application/ResearchLab.Application.csproj" />
     <Project Path="src/ResearchLab.Infrastructure/ResearchLab.Infrastructure.csproj" />
+    <Project Path="src/ResearchLab.Execution/ResearchLab.Execution.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/ResearchLab.ProcessFixture/ResearchLab.ProcessFixture.csproj" />
     <Project Path="tests/ResearchLab.Domain.Tests/ResearchLab.Domain.Tests.csproj" />
     <Project Path="tests/ResearchLab.IntegrationTests/ResearchLab.IntegrationTests.csproj" />
   </Folder>
