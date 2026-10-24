@@ -4,6 +4,8 @@ using System.Text.Json;
 // Synthetic subprocess fixture for integration tests, not a ResearchLab CLI or sample evidence.
 switch (args.FirstOrDefault())
 {
+    case "interrupt-cli" when OperatingSystem.IsWindows():
+        return await WindowsConsoleInterrupt.RunAsync(args);
     case "owner-session":
         return await HoldOwnershipAsync(args);
     case "success":

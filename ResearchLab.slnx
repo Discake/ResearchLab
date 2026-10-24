@@ -6,6 +6,9 @@
     <Project Path="src/ResearchLab.Execution/ResearchLab.Execution.csproj" />
     <Project Path="src/ResearchLab.Cli/ResearchLab.Cli.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/foreground-demo/ForegroundDemo.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ResearchLab.ProcessFixture/ResearchLab.ProcessFixture.csproj" />
     <Project Path="tests/ResearchLab.Domain.Tests/ResearchLab.Domain.Tests.csproj" />

@@ -3,15 +3,17 @@ using ResearchLab.Application;
 
 namespace ResearchLab.Cli;
 
-public enum ReadCommand { ProjectList, ExperimentList, RunList, RunShow }
+public enum ConsoleCommand { ProjectList, ExperimentList, RunList, RunShow, RunStart, DatabaseInit, ProjectImport, ExperimentCreate }
 
-public sealed record CommandArguments(ReadCommand Command, string DatabasePath, string DataDirectory,
-    Guid? Id, RunPageRequest Page)
+public sealed record CommandArguments(ConsoleCommand Command, string DatabasePath, string DataDirectory,
+    Guid? Id, RunPageRequest Page, string Parameters = "{}", bool IncludeLogs = false,
+    string? Workspace = null, string? Name = null, string? Definition = null)
 {
     public static CommandArguments Parse(string[] args)
     {
         var words = new List<string>();
         var options = new Dictionary<string, string>(StringComparer.Ordinal);
+        var includeLogs = false;
         foreach (var argument in args)
             ArgumentNullException.ThrowIfNull(argument);
         for (var index = 0; index < args.Length; index++)
@@ -22,7 +24,14 @@ public sealed record CommandArguments(ReadCommand Command, string DatabasePath, 
                 words.Add(word);
                 continue;
             }
-            if (word is not ("--database" or "--data-dir" or "--project" or "--experiment" or "--offset" or "--page-size"))
+            if (word == "--include-logs")
+            {
+                if (includeLogs) throw new ArgumentException("Option --include-logs was specified more than once.");
+                includeLogs = true;
+                continue;
+            }
+            if (word is not ("--database" or "--data-dir" or "--project" or "--experiment" or "--offset" or "--page-size" or
+                "--parameters" or "--name" or "--definition"))
                 throw new ArgumentException("Unknown option. Use --help for supported options.");
             if (++index == args.Length || args[index].StartsWith("--", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(args[index]))
                 throw new ArgumentException($"Option {word} requires a value.");
@@ -32,34 +41,47 @@ public sealed record CommandArguments(ReadCommand Command, string DatabasePath, 
 
         var command = words.ToArray() switch
         {
-            ["project", "list"] => ReadCommand.ProjectList,
-            ["experiment", "list"] => ReadCommand.ExperimentList,
-            ["run", "list"] => ReadCommand.RunList,
-            ["run", "show", _] => ReadCommand.RunShow,
+            ["project", "list"] => ConsoleCommand.ProjectList,
+            ["experiment", "list"] => ConsoleCommand.ExperimentList,
+            ["run", "list"] => ConsoleCommand.RunList,
+            ["run", "show", _] => ConsoleCommand.RunShow,
+            ["run", "start", _] => ConsoleCommand.RunStart,
+            ["database", "init"] => ConsoleCommand.DatabaseInit,
+            ["project", "import", _] => ConsoleCommand.ProjectImport,
+            ["experiment", "create"] => ConsoleCommand.ExperimentCreate,
             _ => throw new ArgumentException("Unknown or incomplete command. Use --help for supported commands.")
         };
         foreach (var option in options.Keys)
         {
             var allowed = option is "--database" or "--data-dir" ||
-                (command == ReadCommand.ExperimentList && option == "--project") ||
-                (command == ReadCommand.RunList && option is "--experiment" or "--offset" or "--page-size");
+                (command is ConsoleCommand.ExperimentList or ConsoleCommand.ExperimentCreate && option == "--project") ||
+                (command == ConsoleCommand.RunList && option is "--experiment" or "--offset" or "--page-size") ||
+                (command == ConsoleCommand.RunStart && option == "--parameters") ||
+                (command == ConsoleCommand.ProjectImport && option == "--name") ||
+                (command == ConsoleCommand.ExperimentCreate && option == "--definition");
             if (!allowed)
                 throw new ArgumentException($"Option {option} is not supported for this command.");
         }
+        if (includeLogs && command != ConsoleCommand.RunShow)
+            throw new ArgumentException("Option --include-logs is supported only for run show.");
         var database = FullPath(Required("--database"));
         var directory = FullPath(Required("--data-dir"));
         Guid? id = command switch
         {
-            ReadCommand.ExperimentList => Identifier(Required("--project")),
-            ReadCommand.RunList => Identifier(Required("--experiment")),
-            ReadCommand.RunShow => Identifier(words[2]),
+            ConsoleCommand.ExperimentList or ConsoleCommand.ExperimentCreate => Identifier(Required("--project")),
+            ConsoleCommand.RunList => Identifier(Required("--experiment")),
+            ConsoleCommand.RunShow or ConsoleCommand.RunStart => Identifier(words[2]),
             _ => null
         };
         var defaults = new RunPageRequest();
         var offset = Integer("--offset", defaults.Offset);
         var size = Integer("--page-size", defaults.PageSize);
         // Pagination limits belong to Application, not to the console adapter.
-        return new(command, database, directory, id, new RunPageRequest(offset, size));
+        return new(command, database, directory, id, new RunPageRequest(offset, size),
+            options.GetValueOrDefault("--parameters", "{}"), includeLogs,
+            command == ConsoleCommand.ProjectImport ? FullPath(words[2]) : null,
+            command == ConsoleCommand.ProjectImport ? Required("--name") : null,
+            command == ConsoleCommand.ExperimentCreate ? FullPath(Required("--definition")) : null);
 
         string Required(string option) => options.TryGetValue(option, out var value) ? value :
             throw new ArgumentException($"Required option {option} is missing.");

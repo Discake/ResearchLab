@@ -2,8 +2,10 @@
 
 This is the implemented Application/Execution contract extending
 [the lifecycle design](run-lifecycle-design.md). Domain transitions and database schema
-are unchanged. There is no daemon, queue, detached driver, RPC, CLI or cancellation from
-another process. The caller holds one `RunOperation` for each attempt.
+are unchanged. There is no daemon, queue, detached driver, RPC or cancellation from another
+process. The caller holds one `RunOperation` for each attempt. The [foreground CLI](foreground-run.md)
+now drives this contract, including Ctrl+C. Its foreground cleanup retries keep the same
+owner; the Execution adapter itself still does not run an automatic retry loop.
 
 ## Ownership and waiting
 

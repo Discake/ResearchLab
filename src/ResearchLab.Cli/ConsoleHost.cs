@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using ResearchLab.Application;
 using ResearchLab.Domain;
 using ResearchLab.Execution;
@@ -8,26 +9,33 @@ using ResearchLab.Infrastructure.Persistence;
 
 namespace ResearchLab.Cli;
 
-public static class ConsoleHost
+public static partial class ConsoleHost
 {
     public const string Usage = """
-        ResearchLab read-only console host
+        ResearchLab local console host
+        researchlab --database <sqlite-file> --data-dir <log-root> database init
+        researchlab --database <sqlite-file> --data-dir <log-root> project import <path> --name <name>
+        researchlab --database <sqlite-file> --data-dir <log-root> experiment create --project <project-id> --definition <json-file>
         researchlab --database <sqlite-file> --data-dir <log-root> project list
         researchlab --database <sqlite-file> --data-dir <log-root> experiment list --project <project-id>
         researchlab --database <sqlite-file> --data-dir <log-root> run list --experiment <experiment-id> [--offset <n>] [--page-size <n>]
         researchlab --database <sqlite-file> --data-dir <log-root> run show <run-id>
+        researchlab --database <sqlite-file> --data-dir <log-root> run show <run-id> --include-logs
+        researchlab --database <sqlite-file> --data-dir <log-root> run start <experiment-id> [--parameters <json-object>]
         researchlab --help
         Both paths are explicit; relative paths resolve against the current directory.
-        --data-dir is the existing private log root used by RunLogFiles.
+        --data-dir is the private log root used by RunLogFiles; start creates bounded logs here.
         Run pages use Application defaults and limits (50 by default, maximum 100).
-        Output: JSON on stdout; errors on stderr. No initialization, migrations or recovery.
-        Exit codes: 0 success, 1 unexpected error, 2 usage, 3 not found, 4 storage/data error, 130 canceled.
+        Start displays a trust review on stderr; type yes on stdin to approve this invocation only.
+        Output: JSON on stdout; review/progress/errors on stderr. Only database init applies migrations. No automatic recovery.
+        Exit codes: 0 success, 1 unexpected error, 2 usage/validation, 3 not found, 4 storage/data error,
+        5 trust declined/changed, 6 Run failed, 124 Run timed out, 130 canceled.
         """;
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public static async Task<int> RunAsync(string[] args, TextWriter output, TextWriter error,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, TextReader? input = null)
     {
         if (args is ["--help"] or ["-h"])
         {
@@ -46,14 +54,30 @@ public static class ConsoleHost
         {
             if (File.Exists(request.DataDirectory))
                 throw new IOException("Configured data directory is not a directory.");
-            // Composition only. Never initialize/migrate, acquire an owner session or execute.
-            var store = new SqliteResearchStore(request.DatabasePath, readOnly: true);
+            var readOnly = request.Command is ConsoleCommand.ProjectList or ConsoleCommand.ExperimentList or ConsoleCommand.RunList or ConsoleCommand.RunShow;
+            var store = new SqliteResearchStore(request.DatabasePath, readOnly: readOnly,
+                createIfMissing: request.Command == ConsoleCommand.DatabaseInit);
             var catalog = new ProjectCatalog(store, new WorkspaceInspector());
             var history = new RunHistory(store);
             object result;
             switch (request.Command)
             {
-                case ReadCommand.ProjectList:
+                case ConsoleCommand.DatabaseInit:
+                    await store.InitializeAsync(cancellationToken);
+                    result = new { Initialized = true };
+                    break;
+                case ConsoleCommand.ProjectImport:
+                    var imported = await catalog.ImportProjectAsync(request.Workspace!, request.Name!, cancellationToken);
+                    result = new { Id = imported.Project.Id.Value, imported.Project.Name, imported.Diagnostics };
+                    break;
+                case ConsoleCommand.ExperimentCreate:
+                    var definition = ExperimentJson.Definition(await File.ReadAllTextAsync(request.Definition!, cancellationToken));
+                    var created = await catalog.CreateExperimentAsync(new ProjectId(request.Id!.Value), definition, cancellationToken);
+                    result = new { Id = created.Id.Value, ProjectId = created.ProjectId.Value, created.Definition.Name };
+                    break;
+                case ConsoleCommand.RunStart:
+                    return await StartAsync(request, store, catalog, output, error, input ?? Console.In, cancellationToken);
+                case ConsoleCommand.ProjectList:
                     result = (await catalog.ListProjectsAsync(cancellationToken)).Select(project => new
                     {
                         Id = project.Id.Value,
@@ -62,7 +86,7 @@ public static class ConsoleHost
                         project.CreatedAtUtc
                     }).ToArray();
                     break;
-                case ReadCommand.ExperimentList:
+                case ConsoleCommand.ExperimentList:
                     var projectId = new ProjectId(request.Id!.Value);
                     await catalog.GetProjectAsync(projectId, cancellationToken);
                     result = (await catalog.ListExperimentsAsync(projectId, cancellationToken)).Select(experiment => new
@@ -76,14 +100,15 @@ public static class ConsoleHost
                         experiment.UpdatedAtUtc
                     }).ToArray();
                     break;
-                case ReadCommand.RunList:
+                case ConsoleCommand.RunList:
                     result = (await history.ListRunsAsync(new ExperimentId(request.Id!.Value), request.Page, cancellationToken))
                         .Select(run => Describe(run)).ToArray();
                     break;
-                case ReadCommand.RunShow:
+                case ConsoleCommand.RunShow:
                     var details = await history.GetRunAsync(new RunId(request.Id!.Value), cancellationToken);
                     var logs = new RunLogs(store, new RunLogFiles(request.DataDirectory));
-                    result = Describe(details, await logs.GetPathsAsync(details.Id, cancellationToken));
+                    var paths = await logs.GetPathsAsync(details.Id, cancellationToken);
+                    result = Describe(details, paths, request.IncludeLogs ? await ReadLogsAsync(logs, details.Id, paths, cancellationToken) : null);
                     break;
                 default:
                     throw new InvalidOperationException("Unsupported command.");
@@ -93,7 +118,7 @@ public static class ConsoleHost
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            await error.WriteLineAsync("Read canceled.");
+            await error.WriteLineAsync("Operation canceled before active execution completed.");
             return 130;
         }
         catch (CatalogException exception) when (exception.Code is "ProjectNotFound" or "ExperimentNotFound" or "RunNotFound")
@@ -101,20 +126,41 @@ public static class ConsoleHost
             await error.WriteLineAsync($"{exception.Code}: requested record was not found.");
             return 3;
         }
-        catch (Exception exception) when (exception is SqliteException or IOException or UnauthorizedAccessException or JsonException or DomainException)
+        catch (CatalogException exception) when (exception.Code is "TaskNotTrusted" or "TaskChanged" or "PreparationChanged")
         {
-            await error.WriteLineAsync("Cannot read configured storage. Check access and an existing compatible ResearchLab database/data directory.");
+            await error.WriteLineAsync("The reviewed task is no longer trusted or changed; review it in a new invocation.");
+            return 5;
+        }
+        catch (CatalogException exception)
+        {
+            await error.WriteLineAsync($"Catalog or execution storage error: {exception.Code}.");
+            return exception.Code == "ProjectAlreadyImported" ? 2 : 4;
+        }
+        catch (DomainException exception) when (request.Command is ConsoleCommand.RunStart or ConsoleCommand.ExperimentCreate)
+        {
+            await error.WriteLineAsync($"Validation failed: {exception.Code}.");
+            return 2;
+        }
+        catch (Exception exception) when ((exception is ArgumentException or JsonException) &&
+            (request.Command is ConsoleCommand.RunStart or ConsoleCommand.ExperimentCreate))
+        {
+            await error.WriteLineAsync("Invalid JSON input or experiment parameters. Use --help and the foreground-run guide.");
+            return 2;
+        }
+        catch (Exception exception) when (exception is SqliteException or DbUpdateException or IOException or UnauthorizedAccessException or JsonException or DomainException)
+        {
+            await error.WriteLineAsync("Cannot read configured storage or save changes. Check access and a compatible ResearchLab database/data directory; use database init explicitly for initialization/migrations.");
             return 4;
         }
         catch (Exception)
         {
             // No exception dumps, connection strings, environment or arbitrary stored text.
-            await error.WriteLineAsync("The read failed unexpectedly.");
+            await error.WriteLineAsync("The operation failed unexpectedly.");
             return 1;
         }
     }
 
-    private static object Describe(RunDetails run, RunLogPaths? logs = null) => new
+    private static object Describe(RunDetails run, RunLogPaths? logs = null, object? logOutput = null) => new
     {
         Id = run.Id.Value,
         ExperimentId = run.ExperimentId.Value,
@@ -125,6 +171,7 @@ public static class ConsoleHost
         Parameters = run.Parameters.ToDictionary(pair => pair.Key, pair => pair.Value.Value),
         run.ExitCode,
         run.Diagnostic,
-        Logs = logs
+        Logs = logs,
+        LogOutput = logOutput
     };
 }

@@ -1,8 +1,10 @@
-# Read-only console host
+# Console host: metadata reads
 
 ResearchLab.Cli is the composition root for the existing ProjectCatalog, RunHistory and
 RunLogs services. It contains argument parsing, response formatting and exit-code handling.
-It adds no domain rules, migration runner, owner session, recovery or execution command.
+These read commands add no domain rules, owner session or recovery and do not execute tasks.
+The same CLI now also supports explicit initialization/import/experiment creation and
+foreground execution; see the [reproducible foreground guide](foreground-run.md).
 
 The application executable is named `researchlab`. From a built checkout, invoke it with
 `dotnet run --no-build --project src/ResearchLab.Cli -- <arguments>` or
@@ -24,7 +26,7 @@ Supported command arguments:
 project list
 experiment list --project <project-id>
 run list --experiment <experiment-id> [--offset <n>] [--page-size <n>]
-run show <run-id>
+run show <run-id> [--include-logs]
 --help
 ```
 
@@ -36,13 +38,14 @@ Offset pagination has the existing concurrency limitations described in [Run his
 Success writes one indented JSON value to stdout: arrays for lists (including `[]`), an
 object for show. Project output omits workspace paths. Run output uses Application's safe
 diagnostics, recorded parameters and dates/exit code; show also includes known relative
-stdout/stderr paths through RunLogs, without reading log contents. JSON escaping prevents
+stdout/stderr paths through RunLogs. Optional `--include-logs` also returns bounded, JSON-escaped
+log contents as described in the foreground guide. JSON escaping prevents
 stored control characters from becoming terminal control sequences. Recorded parameters
 may themselves contain private user input; this is a local inspection tool, not a public export.
 
 Reads open SQLite with Mode=ReadOnly. A missing, empty, corrupt or incompatible database
-is an error; the CLI never creates a database or runs migrations. No file deletion or task
-execution is performed. Log lookup retains the existing containment/link checks and trusted
+is an error; read commands never create a database or run migrations. No file deletion or task
+execution is performed by reads. Log lookup retains the existing containment/link checks and trusted
 private-root TOCTOU limitations. Explicitly choose the intended existing database and log root.
 
 Errors go to stderr, with no exception dumps, raw database diagnostics or private host paths:

@@ -10,11 +10,19 @@
     <ProjectReference Include="../../src/ResearchLab.Execution/ResearchLab.Execution.csproj" />
     <ProjectReference Include="../../src/ResearchLab.Cli/ResearchLab.Cli.csproj" />
     <ProjectReference Include="../ResearchLab.ProcessFixture/ResearchLab.ProcessFixture.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../../samples/foreground-demo/ForegroundDemo.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <Target Name="CopyProcessFixture" AfterTargets="Build">
     <ItemGroup>
       <ProcessFixtureFiles Include="$(MSBuildThisFileDirectory)../ResearchLab.ProcessFixture/bin/$(Configuration)/$(TargetFramework)/**/*" />
     </ItemGroup>
     <Copy SourceFiles="@(ProcessFixtureFiles)" DestinationFiles="@(ProcessFixtureFiles->'$(OutDir)ProcessFixture/%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
+  <Target Name="CopyForegroundDemo" AfterTargets="Build">
+    <ItemGroup>
+      <ForegroundDemoFiles Include="$(MSBuildThisFileDirectory)../../samples/foreground-demo/bin/$(Configuration)/$(TargetFramework)/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ForegroundDemoFiles)" DestinationFolder="$(OutDir)ForegroundDemo" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)../../samples/foreground-demo/experiment.json" DestinationFolder="$(OutDir)ForegroundDemo" />
   </Target>
 </Project>

@@ -4,7 +4,7 @@ Local-first research platform connecting source code, experiment runs, recorded
 evidence and publishable Research Stories. This repository currently implements
 **M0–M2: bootstrap, domain core, SQLite persistence and local project import**.
 M3 also includes preparation, trusted foreground execution, managed cancellation and local recovery. The application API
-is usable from .NET code and a minimal read-only console host. A UI is not implemented yet.
+is usable from .NET code and the foreground CLI. A UI is not implemented yet.
 
 ## Prerequisites and verification
 
@@ -50,7 +50,8 @@ dotnet run --no-build --project src/ResearchLab.Cli -- --help
 
 The following PowerShell examples use an **existing ResearchLab database** containing
 at least one project, experiment and Run. Set the two paths to your own existing storage;
-no example database is shipped or created by the CLI. `--data-dir` is exactly the private
+no example database is shipped. Explicit `database init`, import/create and start commands
+are described in the foreground guide below. `--data-dir` is exactly the private
 log root previously supplied to `RunLogFiles`, with no added subdirectory.
 These four commands are exercised against synthetic SQLite data by subprocess tests.
 
@@ -77,14 +78,24 @@ Lists return JSON arrays (`[]` is a successful empty list); show returns a JSON 
 including safe diagnostics and known relative log paths. Run history is paged by Application
 (50 items by default, maximum 100). Errors go to stderr: exit codes are 0 success, 2 usage,
 3 missing record, 4 storage/data error, 130 canceled, 1 unexpected failure. In PowerShell,
-inspect `$LASTEXITCODE` after invoking the program. SQLite is opened read-only: the host
-does not initialize/migrate databases, create owner sessions, recover Runs or execute tasks.
-There is no `run start` command. The equivalent built executable is
+inspect `$LASTEXITCODE` after invoking the program. These reads open SQLite read-only,
+without initialization/migrations, owner sessions, recovery or task execution.
+The equivalent built executable is
 `src/ResearchLab.Cli/bin/Debug/net10.0/researchlab.exe` on Windows, or use
 `dotnet src/ResearchLab.Cli/bin/Debug/net10.0/researchlab.dll` with the same arguments.
 
 See [console contract](docs/console-host.md) / [контракт консольного host](docs/console-host.ru.md)
 for configuration, data safety and exit codes.
+
+## Start a real experiment from the console
+
+The [foreground guide](docs/foreground-run.md) / [запуск через CLI](docs/foreground-run.ru.md)
+walks from empty storage through explicit `database init`, `project import` and
+`experiment create` to `run start <experiment-id> --parameters <json-object>` using
+the supplied real console example. Each start displays the executable/configuration
+fingerprint and requires `yes` in that invocation; trust is never persisted.
+Ctrl+C requests owned cancellation and waits for cleanup and terminal persistence.
+`run show <run-id> --include-logs` reopens the saved result and bounded log text later.
 
 ## Structure and dependency boundaries
 
@@ -149,11 +160,12 @@ Active and unknown owners are skipped; no process is killed. M4 artifact storage
 Доступ к логам, деталям Run и страницам истории предоставляется через Application.
 M3.3 восстанавливает Created/Running подтверждённо завершённых сеансов в Interrupted;
 активные/неизвестные владельцы не затрагиваются, процессы не завершаются.
-API доступен из .NET и консольного host только для чтения; UI пока нет.
+API доступен из .NET и foreground CLI; UI пока нет.
 Команды `project list`, `experiment list --project <id>`, `run list --experiment <id>`
-и `run show <id>` требуют явных `--database` и `--data-dir`. БД открывается read-only,
-без миграций, recovery и запуска задач. Проверенные примеры PowerShell приведены выше;
-подставьте существующие пути. Синтетические БД создаются только тестами.
+и `run show <id>` требуют явных `--database` и `--data-dir`. Чтение открывает БД read-only,
+без миграций, recovery и запуска задач. Для подготовки и запуска с нуля:
+[foreground-руководство](docs/foreground-run.ru.md). `run start` каждый раз требует review
+и явное yes; Ctrl+C запрашивает отмену с ожиданием терминального сохранения.
 Нужен SDK 10.0.401 (допускаются более новые патчи 10.0.4xx) и доступ к NuGet.
 Команды проверки приведены выше; предупреждения сборки считаются ошибками.
 Тесты проверяют параметры, снимки Run, переходы состояний, версии и метрики.

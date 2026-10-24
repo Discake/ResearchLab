@@ -14,11 +14,11 @@ public sealed class ConsoleHostTests
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     [Theory]
-    [InlineData("project list", ReadCommand.ProjectList)]
-    [InlineData("experiment list --project " + ExampleId, ReadCommand.ExperimentList)]
-    [InlineData("run list --experiment " + ExampleId + " --offset 20 --page-size 10", ReadCommand.RunList)]
-    [InlineData("run show " + ExampleId, ReadCommand.RunShow)]
-    public void ParsesSupportedCommandsAndExplicitPaths(string command, ReadCommand expected)
+    [InlineData("project list", ConsoleCommand.ProjectList)]
+    [InlineData("experiment list --project " + ExampleId, ConsoleCommand.ExperimentList)]
+    [InlineData("run list --experiment " + ExampleId + " --offset 20 --page-size 10", ConsoleCommand.RunList)]
+    [InlineData("run show " + ExampleId, ConsoleCommand.RunShow)]
+    public void ParsesSupportedCommandsAndExplicitPaths(string command, ConsoleCommand expected)
     {
         var database = Path.Combine(Path.GetTempPath(), "synthetic data", "research.db");
         var directory = Path.Combine(Path.GetTempPath(), "synthetic logs");
@@ -26,9 +26,9 @@ public sealed class ConsoleHostTests
         Assert.Equal(expected, parsed.Command);
         Assert.Equal(Path.GetFullPath(database), parsed.DatabasePath);
         Assert.Equal(Path.GetFullPath(directory), parsed.DataDirectory);
-        Assert.Equal(expected == ReadCommand.ProjectList ? null : Guid.Parse(ExampleId), parsed.Id);
-        Assert.Equal(expected == ReadCommand.RunList ? 20 : 0, parsed.Page.Offset);
-        Assert.Equal(expected == ReadCommand.RunList ? 10 : 50, parsed.Page.PageSize);
+        Assert.Equal(expected == ConsoleCommand.ProjectList ? null : Guid.Parse(ExampleId), parsed.Id);
+        Assert.Equal(expected == ConsoleCommand.RunList ? 20 : 0, parsed.Page.Offset);
+        Assert.Equal(expected == ConsoleCommand.RunList ? 10 : 50, parsed.Page.PageSize);
     }
 
     [Theory]
@@ -80,7 +80,7 @@ public sealed class ConsoleHostTests
         using var error = new StringWriter(CultureInfo.InvariantCulture);
         Assert.Equal(0, await ConsoleHost.RunAsync(["--help"], output, error, Token));
         Assert.Contains("run show", output.ToString());
-        Assert.DoesNotContain("run start", output.ToString());
+        Assert.Contains("run start", output.ToString());
         Assert.Empty(error.ToString());
     }
 
