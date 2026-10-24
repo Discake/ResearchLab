@@ -88,14 +88,17 @@ M3 now includes a minimal trusted ProcessRunner and persisted startup/completion
 See [execution API and limitations](docs/minimal-execution.md) /
 [исполнение и ограничения](docs/minimal-execution.ru.md). Bounded stdout/stderr logs are
 retained per Run and available through Application.
-Advanced cancellation, M4 artifact storage, history listing and recovery remain future increments.
+Run details and bounded history pages are available through Application:
+[RunHistory API](docs/run-history.md) / [чтение истории Run](docs/run-history.ru.md).
+M4 artifact storage and recovery remain future increments.
 
 ## Кратко по-русски
 
 Реализованы M0–M2: доменное ядро, SQLite/EF Core, импорт, каталог экспериментов
 и явное подтверждение доверия. M3 дополнен подготовкой и минимальным доверенным исполнением
 с сохранением состояний Run и раздельных ограниченных логов stdout/stderr.
-Доступ к логам предоставляется через Application по RunId. API доступен из .NET; UI пока нет.
+Доступ к логам, деталям Run и страницам истории предоставляется через Application.
+API доступен из .NET; UI пока нет.
 Нужен SDK 10.0.401 (допускаются более новые патчи 10.0.4xx) и доступ к NuGet.
 Команды проверки приведены выше; предупреждения сборки считаются ошибками.
 Тесты проверяют параметры, снимки Run, переходы состояний, версии и метрики.

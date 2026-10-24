@@ -18,6 +18,7 @@ public interface IResearchStore
     Task<IReadOnlyList<Experiment>> ListExperimentsAsync(ProjectId projectId, CancellationToken cancellationToken = default);
     Task AddRunAsync(Run run, CancellationToken cancellationToken = default);
     Task<Run?> GetRunAsync(RunId id, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Run>> ListRunsAsync(ExperimentId experimentId, RunPageRequest page, CancellationToken cancellationToken = default);
     Task SaveRunAsync(Run run, long expectedVersion, CancellationToken cancellationToken = default);
 }
 

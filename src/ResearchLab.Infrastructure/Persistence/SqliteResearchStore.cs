@@ -83,6 +83,22 @@ public sealed class SqliteResearchStore : IResearchStore
         return await LoadRun(db, id, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Run>> ListRunsAsync(ExperimentId experimentId, RunPageRequest page,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        await using var db = new ResearchDbContext(options);
+        // SQLite cannot translate EF ORDER BY DateTimeOffset. Domain stores all Run
+        // creation timestamps in UTC, so SQLite's canonical TEXT representation sorts
+        // chronologically, including fractional seconds. GUIDs use SQLite TEXT order.
+        // Parameterized LIMIT/OFFSET is applied before materialization; no metrics join.
+        return await db.Set<Run>().FromSqlInterpolated($"""
+            SELECT * FROM Runs WHERE ExperimentId = {experimentId.Value}
+            ORDER BY CreatedAtUtc DESC, Id ASC
+            LIMIT {page.PageSize} OFFSET {page.Offset}
+            """).AsNoTracking().ToListAsync(cancellationToken);
+    }
+
     public async Task SaveRunAsync(Run run, long expectedVersion, CancellationToken cancellationToken = default)
     {
         await using var db = new ResearchDbContext(options);

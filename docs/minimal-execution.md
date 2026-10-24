@@ -73,7 +73,8 @@ persisted, the foreground workflow owns execution and mandatory state writes unt
 For explicit cancellation use PrepareRunAsync and retain its RunOperation: ExecuteAsync drives
 the attempt, WaitAsync(token) cancels only waiting, and RequestCancellation requests stopping.
 See the managed cancellation contract for races, retries and confirmation requirements.
-Background execution, M4 artifact directory allocation, run-history listing and restart
+Run details and paged history reads are implemented through [RunHistory](run-history.md).
+Background execution, M4 artifact directory allocation and restart
 reconciliation are not implemented.
 
 The inherited environment is not sandboxed. Filesystem TOCTOU races and
