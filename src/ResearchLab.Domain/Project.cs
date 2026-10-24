@@ -2,6 +2,13 @@ namespace ResearchLab.Domain;
 
 public sealed class Project
 {
+    // Persistence materialization; public construction still validates the aggregate.
+    private Project()
+    {
+        Name = null!;
+        WorkspacePath = null!;
+    }
+
     public Project(ProjectId id, string name, string workspacePath, DateTimeOffset createdAt,
         string? description = null, string? gitRemoteUrl = null)
     {

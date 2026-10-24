@@ -4,6 +4,8 @@ namespace ResearchLab.Domain;
 
 public sealed class Experiment
 {
+    private Experiment() => Definition = null!;
+
     public Experiment(ExperimentId id, ProjectId projectId, string name, string description,
         string taskKey, IEnumerable<ParameterDefinition> parameterDefinitions, DateTimeOffset createdAt)
     {

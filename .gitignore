@@ -16,3 +16,7 @@
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# Local ResearchLab metadata and EF design-time database
+.researchlab/
+researchlab-design.db*

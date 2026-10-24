@@ -2,6 +2,8 @@ namespace ResearchLab.Domain;
 
 public sealed class MetricPoint
 {
+    private MetricPoint() => Name = null!;
+
     internal MetricPoint(RunId runId, string name, double value, long? step,
         DateTimeOffset recordedAt, string? unit, long sequence)
     {

@@ -1,5 +1,8 @@
 # M1 — domain core
 
+This document describes the M1 domain boundary. M2 now implements the storage/import
+responsibilities discussed here; see [M2 notes](persistence-import.md).
+
 Implemented in `ResearchLab.Domain`, using only the .NET standard library. There
 are no application use cases, storage, migrations, import, command execution or UI.
 The domain can be exercised through its public API and tests; it is not a runnable

@@ -1,5 +1,3 @@
-using System.Collections.ObjectModel;
-
 namespace ResearchLab.Domain;
 
 // Mutations are serialized by the owning application service. Persistence must compare
@@ -7,8 +5,16 @@ namespace ResearchLab.Domain;
 public sealed class Run
 {
     private readonly List<MetricPoint> metrics = [];
-    private readonly Dictionary<string, string?> metricUnits = new(StringComparer.Ordinal);
     private DateTimeOffset lastTransitionAt;
+
+    private Run()
+    {
+        ExperimentSnapshot = null!;
+        ParametersSnapshot = null!;
+        SourceSnapshot = null!;
+        EnvironmentSnapshot = null!;
+        Metrics = metrics.AsReadOnly();
+    }
 
     private Run(RunId id, ExperimentSnapshot experiment, IReadOnlyDictionary<string, ParameterValue> parameters,
         SourceSnapshot source, EnvironmentSnapshot environment, DateTimeOffset createdAt)
@@ -57,7 +63,7 @@ public sealed class Run
     public string? FailureReason { get; private set; }
     public TimeSpan Timeout => ExperimentSnapshot.Task.Timeout;
     public TimeSpan? Duration => FinishedAtUtc - StartedAtUtc;
-    public ReadOnlyCollection<MetricPoint> Metrics { get; }
+    public IReadOnlyList<MetricPoint> Metrics { get; }
 
     // The caller must have successfully started the OS process before invoking this method.
     public void Start(DateTimeOffset at, int processId, long expectedVersion)
@@ -116,10 +122,9 @@ public sealed class Run
         if (Status != RunStatus.Running)
             throw new DomainException("InvalidMetricState", "Metrics can only be appended while Running.");
         var metric = new MetricPoint(Id, name, value, step, recordedAt, unit, metrics.Count + 1L);
-        if (metricUnits.TryGetValue(name, out var previousUnit) &&
-            !string.Equals(previousUnit, unit, StringComparison.Ordinal))
+        var previous = metrics.FirstOrDefault(point => point.Name == name);
+        if (previous is not null && !string.Equals(previous.Unit, unit, StringComparison.Ordinal))
             throw new DomainException("IncompatibleMetricUnit", $"Unit for metric '{name}' changed within the run.");
-        metricUnits[name] = unit;
         metrics.Add(metric);
         Version++;
         return metric;
