@@ -1,134 +1,243 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using ResearchLab.Application;
 using ResearchLab.Domain;
 
 namespace ResearchLab.Execution;
 
-public sealed class ProcessRunner(RunLogFiles logs) : IProcessRunner
+// The narrow OS stop seam permits deterministic testing of denied/failed termination.
+public interface IProcessTerminator
 {
-    private const long OutputLimitBytes = 1024 * 1024;
-    private static readonly TimeSpan CleanupTimeout = TimeSpan.FromSeconds(5);
+    void KillTree(Process process);
+}
 
-    public async Task<ProcessResult> ExecuteAsync(RunId runId, PreparedRun launch, Func<ProcessStarted, Task> onStarted)
+public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminator = null,
+    TimeProvider? timeProvider = null) : IProcessRunner
+{
+    public IProcessExecution CreateExecution(RunId runId, PreparedRun launch)
     {
         ArgumentNullException.ThrowIfNull(launch);
-        ArgumentNullException.ThrowIfNull(onStarted);
-        FileStream outputFile;
-        FileStream errorFile;
-        try { (outputFile, errorFile) = logs.Create(runId); }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        return new OwnedProcess(logs, runId, launch, terminator, timeProvider ?? TimeProvider.System);
+    }
+
+    // Convenience for foreground callers that do not need a cancellation handle.
+    public Task<ProcessResult> ExecuteAsync(RunId runId, PreparedRun launch, Func<ProcessStarted, Task> onStarted) =>
+        CreateExecution(runId, launch).ExecuteAsync(onStarted);
+
+    private sealed class OwnedProcess(RunLogFiles logs, RunId runId, PreparedRun launch,
+        IProcessTerminator? terminator, TimeProvider clock) : IProcessExecution
+    {
+        private const long OutputLimitBytes = 1024 * 1024;
+        private static readonly TimeSpan CleanupTimeout = TimeSpan.FromSeconds(5);
+        private readonly object gate = new();
+        private readonly SemaphoreSlim driver = new(1);
+        private readonly TaskCompletionSource signal = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly CancellationTokenSource reads = new();
+        private enum Outcome { Pending, Exit, Canceled, TimedOut, Failed }
+        private Outcome outcome;
+        private Process? process;
+        private FileStream? output;
+        private FileStream? error;
+        private Task? exit;
+        private Task? drains;
+        private ITimer? deadline;
+        private bool attempted;
+        private bool released;
+        private long outputBytes;
+        private string? drainFailure;
+        private ProcessResult? result;
+        private ExceptionDispatchInfo? startupFailure;
+
+        public bool RequestCancellation()
         {
-            return new(null, false, "Run log files could not be created.");
-        }
-        await using var output = outputFile;
-        await using var error = errorFile;
-        // On Windows, batch files can trigger command-processor fallback even with
-        // UseShellExecute=false. This increment accepts native .exe entry points only.
-        if (OperatingSystem.IsWindows() && !string.Equals(Path.GetExtension(launch.ExecutablePath), ".exe", StringComparison.OrdinalIgnoreCase))
-            return new(null, false, "Windows execution requires a native .exe entry point; script/shell fallback is not supported.");
-        var start = new ProcessStartInfo(launch.ExecutablePath)
-        {
-            UseShellExecute = false,
-            WorkingDirectory = launch.WorkingDirectory,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-        foreach (var argument in launch.ExperimentSnapshot.Task.Arguments)
-            start.ArgumentList.Add(argument);
-        start.Environment["RESEARCHLAB_PARAMETERS_JSON"] = JsonSerializer.Serialize(
-            launch.ParametersSnapshot.ToDictionary(pair => pair.Key, pair => pair.Value.Value));
-        using var process = new Process { StartInfo = start };
-        try
-        {
-            if (!process.Start())
-                return new(null, false, "The operating system did not start the process.");
-        }
-        catch (Exception exception) when (exception is Win32Exception or IOException or InvalidOperationException or UnauthorizedAccessException)
-        {
-            // Do not persist arbitrary exception text containing private host paths.
-            return new(null, false, "The operating system could not start the declared executable.");
+            lock (gate)
+            {
+                Choose(Outcome.Canceled);
+                return outcome == Outcome.Canceled;
+            }
         }
 
-        var started = new ProcessStarted(process.Id, DateTimeOffset.UtcNow);
-        using var deadline = new CancellationTokenSource(launch.ExperimentSnapshot.Task.Timeout);
-        long outputBytes = 0;
-        string? drainFailure = null;
-        var stdout = DrainAsync(process.StandardOutput.BaseStream, output);
-        var stderr = DrainAsync(process.StandardError.BaseStream, error);
-        // Observe exit immediately: a slow acknowledgement must not turn an already
-        // completed process/drain into a timeout when WaitForExitAsync is first called.
-        var completion = Task.WhenAll(process.WaitForExitAsync(deadline.Token), stdout, stderr);
-        try
+        // gate serializes intent and observed exit. An already exited root wins late intent.
+        private void Choose(Outcome requested)
         {
-            process.StandardInput.Close();
-            await onStarted(started);
+            lock (gate)
+            {
+                if (outcome != Outcome.Pending)
+                    return;
+                outcome = process is not null && process.HasExited ? Outcome.Exit : requested;
+                signal.TrySetResult();
+            }
+        }
+
+        public async Task<ProcessResult> ExecuteAsync(Func<ProcessStarted, Task> onStarted)
+        {
+            ArgumentNullException.ThrowIfNull(onStarted);
+            await driver.WaitAsync();
             try
             {
-                await completion.WaitAsync(deadline.Token);
-                return new(process.ExitCode, false, drainFailure);
+                if (released)
+                {
+                    startupFailure?.Throw();
+                    return result!;
+                }
+                if (!attempted)
+                {
+                    attempted = true;
+                    lock (gate)
+                    {
+                        if (outcome == Outcome.Canceled)
+                        {
+                            result = new(null, false, null, Canceled: true);
+                            Release();
+                            return result;
+                        }
+                        try
+                        {
+                            (output, error) = logs.Create(runId);
+                            if (OperatingSystem.IsWindows() && !string.Equals(Path.GetExtension(launch.ExecutablePath), ".exe", StringComparison.OrdinalIgnoreCase))
+                                throw new InvalidOperationException("Native executable required.");
+                            var start = new ProcessStartInfo(launch.ExecutablePath)
+                            {
+                                UseShellExecute = false,
+                                WorkingDirectory = launch.WorkingDirectory,
+                                RedirectStandardInput = true,
+                                RedirectStandardOutput = true,
+                                RedirectStandardError = true,
+                                CreateNoWindow = true
+                            };
+                            foreach (var argument in launch.ExperimentSnapshot.Task.Arguments)
+                                start.ArgumentList.Add(argument);
+                            start.Environment["RESEARCHLAB_PARAMETERS_JSON"] = JsonSerializer.Serialize(
+                                launch.ParametersSnapshot.ToDictionary(pair => pair.Key, pair => pair.Value.Value));
+                            var candidate = new Process { StartInfo = start };
+                            try
+                            {
+                                if (!candidate.Start())
+                                    throw new InvalidOperationException("Process did not start.");
+                                process = candidate;
+                            }
+                            catch { candidate.Dispose(); throw; }
+                        }
+                        catch (Exception exception) when (exception is Win32Exception or IOException or InvalidOperationException or UnauthorizedAccessException)
+                        {
+                            outcome = Outcome.Failed;
+                            result = new(null, false, "The operating system could not prepare logs or start the declared native executable.");
+                            Release();
+                            return result;
+                        }
+                    }
+                    var started = new ProcessStarted(process.Id, clock.GetUtcNow());
+                    exit = process.WaitForExitAsync();
+                    drains = Task.WhenAll(DrainAsync(process.StandardOutput.BaseStream, output!),
+                        DrainAsync(process.StandardError.BaseStream, error!));
+                    deadline = clock.CreateTimer(_ => Choose(Outcome.TimedOut), null,
+                        launch.ExperimentSnapshot.Task.Timeout, Timeout.InfiniteTimeSpan);
+                    try
+                    {
+                        process.StandardInput.Close();
+                        await onStarted(started);
+                    }
+                    catch (Exception exception)
+                    {
+                        startupFailure = ExceptionDispatchInfo.Capture(exception);
+                        Choose(Outcome.Failed);
+                    }
+                }
+
+                // All asynchronous work belongs to this foreground driver and the owned handle.
+                await Task.WhenAny(exit!, signal.Task);
+                Choose(Outcome.Exit);
+                try
+                {
+                    if (!process!.HasExited)
+                    {
+                        try
+                        {
+                            if (terminator is null)
+                                process.Kill(entireProcessTree: true);
+                            else
+                                terminator.KillTree(process);
+                        }
+                        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
+                        {
+                            if (!process.HasExited)
+                                throw new ProcessCleanupException(this);
+                        }
+                    }
+                    await exit!.WaitAsync(CleanupTimeout);
+                }
+                catch (TimeoutException) { throw new ProcessCleanupException(this); }
+                // The root is confirmed dead. Pipe collection is separately bounded.
+                try { await drains!.WaitAsync(CleanupTimeout); }
+                catch (TimeoutException)
+                {
+                    Interlocked.CompareExchange(ref drainFailure, "Process output collection did not complete within the cleanup limit.", null);
+                    reads.Cancel();
+                    // Close pipe handles so no pending read is left using the log files.
+                    process!.StandardOutput.Close();
+                    process.StandardError.Close();
+                    throw new ProcessCleanupException(this);
+                }
+                result = new(process!.ExitCode, outcome == Outcome.TimedOut && drainFailure is null,
+                    drainFailure, outcome == Outcome.Canceled && drainFailure is null);
+                Release();
+                startupFailure?.Throw();
+                return result;
             }
-            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+            catch (Exception exception) when (exception is not ProcessCleanupException && process is not null && !released)
             {
-                await StopAsync(process);
-                return new(process.ExitCode, drainFailure is null, drainFailure);
+                startupFailure ??= ExceptionDispatchInfo.Capture(exception);
+                Choose(Outcome.Failed);
+                throw new ProcessCleanupException(this);
             }
-        }
-        finally
-        {
-            // Includes failure to persist Running in the Application callback.
-            deadline.Cancel();
-            try { await StopAsync(process); }
-            finally
-            {
-                // Bound cleanup even if an inherited pipe does not respond to cancellation.
-                try { await completion.WaitAsync(CleanupTimeout); }
-                catch (OperationCanceledException) when (deadline.IsCancellationRequested) { }
-            }
+            finally { driver.Release(); }
         }
 
-        async Task DrainAsync(Stream stream, Stream destination)
+        private async Task DrainAsync(Stream stream, Stream destination)
         {
             var buffer = new byte[8192];
             try
             {
-                // Cancellation is not EOF: incomplete collection must never look successful.
                 int count;
-                while ((count = await stream.ReadAsync(buffer, deadline.Token)) != 0)
+                while ((count = await stream.ReadAsync(buffer, reads.Token)) != 0)
                 {
                     var total = Interlocked.Add(ref outputBytes, count);
                     var retained = (int)Math.Clamp(OutputLimitBytes - (total - count), 0, count);
                     if (retained > 0)
-                        // Persist already-read evidence even when the execution deadline fires.
-                        await destination.WriteAsync(buffer.AsMemory(0, retained));
+                        await destination.WriteAsync(buffer.AsMemory(0, retained), reads.Token);
                     if (total > OutputLimitBytes)
                     {
                         Interlocked.CompareExchange(ref drainFailure, "Process output exceeded the 1 MiB combined limit.", null);
-                        deadline.Cancel();
+                        Choose(Outcome.Failed);
                         return;
                     }
                 }
-                await destination.FlushAsync();
+                await destination.FlushAsync(reads.Token);
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or OperationCanceledException or ObjectDisposedException)
             {
                 Interlocked.CompareExchange(ref drainFailure, "Process output could not be read or saved.", null);
-                deadline.Cancel();
+                Choose(Outcome.Failed);
             }
         }
-    }
 
-    private static async Task StopAsync(Process process)
-    {
-        if (!process.HasExited)
+        private void Release()
         {
-            try { process.Kill(entireProcessTree: true); }
-            catch (InvalidOperationException) when (process.HasExited) { }
+            // Reached only before startup or after exit and settled collection.
+            released = true;
+            deadline?.Dispose();
+            try { output?.Dispose(); }
+            finally
+            {
+                try { error?.Dispose(); }
+                finally
+                {
+                    process?.Dispose();
+                    reads.Dispose();
+                }
+            }
         }
-        // Failure to stop is surfaced to the caller; never report a false terminal outcome.
-        await process.WaitForExitAsync().WaitAsync(CleanupTimeout);
     }
 }

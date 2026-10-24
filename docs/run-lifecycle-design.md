@@ -1,5 +1,10 @@
 # Run lifecycle and executor interaction — proposed design
 
+Implementation update: foreground ownership and cancellation now follow
+[managed cancellation](managed-cancellation.md). That contract deliberately returns a
+caller-owned attempt and keeps a foreground driver instead of adding the service/async
+startup API proposed below. The remaining recovery design below is still not implemented.
+
 Scope: design following M3.1a, not implemented functionality or approval to implement
 all of M3. Existing Domain transitions, M0–M2 contracts and `PreparedRun` remain unchanged.
 No CLI, HTTP/UI, process control, background scheduler or new dependency is introduced.

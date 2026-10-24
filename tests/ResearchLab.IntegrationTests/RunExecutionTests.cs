@@ -9,7 +9,7 @@ using Xunit;
 
 namespace ResearchLab.IntegrationTests;
 
-public sealed class RunExecutionTests
+public sealed partial class RunExecutionTests
 {
     [Theory]
     [InlineData(false)]
@@ -539,15 +539,21 @@ public sealed class RunExecutionTests
     private static ResearchDbContext Open(TestWorkspace fixture) => new(new DbContextOptionsBuilder<ResearchDbContext>()
         .UseSqlite($"Data Source={fixture.Database};Pooling=False").Options);
 
+    private sealed class TestProcess(Func<Func<ProcessStarted, Task>, Task<ProcessResult>> execute) : IProcessExecution
+    {
+        public bool RequestCancellation() => false;
+        public Task<ProcessResult> ExecuteAsync(Func<ProcessStarted, Task> onStarted) => execute(onStarted);
+    }
+
     private sealed class NeverRunner : IProcessRunner
     {
-        public Task<ProcessResult> ExecuteAsync(RunId runId, PreparedRun launch, Func<ProcessStarted, Task> onStarted) =>
-            throw new InvalidOperationException("Executor must not be reached.");
+        public IProcessExecution CreateExecution(RunId runId, PreparedRun launch) => new TestProcess(onStarted =>
+            throw new InvalidOperationException("Executor must not be reached."));
     }
 
     private sealed class DelegateRunner(Func<PreparedRun, Func<ProcessStarted, Task>, Task<ProcessResult>> execute) : IProcessRunner
     {
-        public Task<ProcessResult> ExecuteAsync(RunId runId, PreparedRun launch, Func<ProcessStarted, Task> onStarted) => execute(launch, onStarted);
+        public IProcessExecution CreateExecution(RunId runId, PreparedRun launch) => new TestProcess(onStarted => execute(launch, onStarted));
     }
 
     private sealed class ChangingInspector(Func<Task> change) : IWorkspaceInspector
@@ -567,7 +573,7 @@ public sealed class RunExecutionTests
     {
         public RunStatus? StatusAfterStart { get; private set; }
 
-        public async Task<ProcessResult> ExecuteAsync(RunId runId, PreparedRun launch, Func<ProcessStarted, Task> onStarted)
+        public IProcessExecution CreateExecution(RunId runId, PreparedRun launch) => new TestProcess(async onStarted =>
         {
             await using var db = Open(fixture);
             var created = Assert.Single(await db.Set<Run>().AsNoTracking().ToListAsync(TestContext.Current.CancellationToken));
@@ -580,6 +586,6 @@ public sealed class RunExecutionTests
                 StatusAfterStart = Assert.Single(runs).Status;
                 Assert.Equal(experimentId, runs[0].ExperimentId);
             });
-        }
+        });
     }
 }

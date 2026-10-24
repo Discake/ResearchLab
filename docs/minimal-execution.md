@@ -1,5 +1,8 @@
 # Minimal trusted local execution
 
+Managed foreground cancellation is documented in [managed cancellation](managed-cancellation.md).
+The execution and cleanup details below include that update.
+
 This increment implements a synchronous Application workflow through a real Execution
 adapter, following M3.1a. It is not the whole M3 milestone.
 
@@ -38,9 +41,11 @@ are structurally compared against preparation. Created is saved before handoff; 
 rechecked against the prepared fingerprint immediately before execution. Later Experiment
 edits cannot rewrite the Run. Persistence uses the last saved version and has no automatic
 conflict/launch retries. Database errors propagate instead of claiming a saved outcome.
-Exceptions from the executor itself produce Failed with a generic diagnostic and no
-invented exit code. A failed startup acknowledgement remains the original application/
-persistence error even if the adapter wraps or swallows it; no terminal write is attempted.
+Ordinary exceptions from the executor after confirmed cleanup produce Failed with a generic
+diagnostic and no invented exit code. A failed startup acknowledgement remains the original
+application/persistence error even if the adapter wraps or swallows it; no terminal write
+is attempted. Unconfirmed cleanup first raises ProcessCleanupException with the retained
+owner; after cleanup retry, the original acknowledgement error is propagated.
 An I/O/access error in the final trust check fails Created without launching the process.
 
 The runner uses an explicit executable, literal ArgumentList, UseShellExecute=false and
@@ -56,19 +61,22 @@ Validated scalar parameters are passed as UTF-8-compatible JSON text through
 `RESEARCHLAB_PARAMETERS_JSON`, without command interpolation. Inherited stdin is replaced
 with closed redirected input. stdout/stderr are drained concurrently using fixed buffers,
 saved separately as raw bytes. A fixed 1 MiB combined byte cap terminates excessive output as
-Failed. The configured timeout bounds execution/draining and produces TimedOut after
-termination. Cleanup attempts process-tree termination and waits up to five seconds for
-the root process; inability to stop is surfaced, never claimed as a successful completion.
-Exit and both drains are observed before awaiting startup acknowledgement: completion
-already confirmed before the deadline remains successful even if acknowledgement is slow.
-Canceled reads are incomplete collection, not EOF. Cleanup also bounds waiting for the
-combined exit/drain tasks to five seconds, including when process termination throws.
+Failed. The configured timeout bounds root execution; confirmed root exit followed by
+successful collection produces TimedOut when the deadline wins arbitration. An already
+exited root keeps its natural outcome even if startup acknowledgement is slow. Cleanup
+attempts tree termination and separately bounds root-exit and drain waits to five seconds
+each. Unconfirmed stop or cleanup retains ownership in ProcessCleanupException, without a
+terminal write, for explicit cleanup retry. Canceled reads mean failed collection, not EOF.
 
-CancellationToken is used only up to initial insertion. Once Created is persisted the
-workflow owns execution and state writes until completion; canceling the calling request
-does not implement CancelRun. No advanced cancellation, background work, M4 artifact directory allocation,
-run-history listing or restart reconciliation is
-implemented. The inherited environment is not sandboxed. Filesystem TOCTOU races and
+CancellationToken applies only through initial insertion in StartRunAsync. Once Created is
+persisted, the foreground workflow owns execution and mandatory state writes until completion.
+For explicit cancellation use PrepareRunAsync and retain its RunOperation: ExecuteAsync drives
+the attempt, WaitAsync(token) cancels only waiting, and RequestCancellation requests stopping.
+See the managed cancellation contract for races, retries and confirmation requirements.
+Background execution, M4 artifact directory allocation, run-history listing and restart
+reconciliation are not implemented.
+
+The inherited environment is not sandboxed. Filesystem TOCTOU races and
 the crash window between OS start and saved Running remain as described in the lifecycle
 design. Descendant cleanup after the root has already exited is not guaranteed; this
 minimal adapter does not add OS job objects or process isolation.

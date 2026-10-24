@@ -5,11 +5,28 @@ namespace ResearchLab.Application;
 public sealed record ProcessStarted(int ProcessId, DateTimeOffset StartedAtUtc);
 
 // A null exit code is also used when no OS process was started.
-public sealed record ProcessResult(int? ExitCode, bool TimedOut, string? FailureReason);
+public sealed record ProcessResult(int? ExitCode, bool TimedOut, string? FailureReason, bool Canceled = false);
+
+// No terminal evidence: the same owner must retain this execution and retry cleanup.
+public sealed class ProcessCleanupException(IProcessExecution execution) : Exception("Process termination or resource cleanup could not be confirmed; execution ownership is retained.")
+{
+    public IProcessExecution Execution { get; } = execution;
+    public RunOperation? Operation { get; internal set; }
+}
+
+public interface IProcessExecution
+{
+    // One foreground driver. A retry after ProcessCleanupException resumes cleanup, never launch.
+    // Await onStarted before returning a result. Results/ordinary exceptions guarantee no
+    // live owned root and settled collection. Otherwise throw ProcessCleanupException,
+    // retaining all handles and pending I/O. Never swallow a failed acknowledgement.
+    Task<ProcessResult> ExecuteAsync(Func<ProcessStarted, Task> onStarted);
+    // Thread-safe, idempotent control intent, not confirmation of termination.
+    bool RequestCancellation();
+}
 
 public interface IProcessRunner
 {
-    // Invoke onStarted only after OS startup; await it before reporting completion.
-    // If it throws, stop the owned process and propagate the error, never relaunch.
-    Task<ProcessResult> ExecuteAsync(RunId runId, PreparedRun launch, Func<ProcessStarted, Task> onStarted);
+    // Create an owner only; no OS startup or I/O. Each owner launches at most once.
+    IProcessExecution CreateExecution(RunId runId, PreparedRun launch);
 }

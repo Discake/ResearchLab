@@ -12,6 +12,14 @@ public sealed class RunExecution(IResearchStore store, ProjectCatalog catalog, I
     public async Task<RunId> StartRunAsync(ExperimentId experimentId,
         IReadOnlyDictionary<string, ParameterValue> parameters, CancellationToken cancellationToken = default)
     {
+        var operation = await PrepareRunAsync(experimentId, parameters, cancellationToken);
+        return await operation.ExecuteAsync();
+    }
+
+    // Persists and prepares an owned attempt, but does not start an OS process.
+    public async Task<RunOperation> PrepareRunAsync(ExperimentId experimentId,
+        IReadOnlyDictionary<string, ParameterValue> parameters, CancellationToken cancellationToken = default)
+    {
         var prepared = await new RunPreparation(catalog, clock).PrepareAsync(experimentId, parameters, cancellationToken);
         var inspection = await inspector.InspectAsync(prepared.WorkingDirectory, cancellationToken);
         var experiment = await catalog.GetExperimentAsync(experimentId, cancellationToken)
@@ -24,72 +32,89 @@ public sealed class RunExecution(IResearchStore store, ProjectCatalog catalog, I
         var run = Run.Create(RunId.New(), experiment, prepared.ExperimentSnapshot.Task, prepared.ParametersSnapshot,
             inspection.Source, prepared.EnvironmentSnapshot, clock.GetUtcNow());
         await store.AddRunAsync(run, cancellationToken);
-        // Once persisted, request cancellation must not abandon process ownership/status writes.
-        try
-        {
-            var trusted = await catalog.GetTrustedTaskAsync(project.Id, experiment.Definition.TaskKey);
-            if (trusted.Fingerprint != prepared.TaskFingerprint || trusted.ExecutablePath != prepared.ExecutablePath)
-                throw new CatalogException("PreparationChanged", "The trusted task changed during preparation; prepare again.");
-        }
-        catch (CatalogException exception)
-        {
-            run.Fail(clock.GetUtcNow(), $"{exception.Code}: {exception.Message}", run.Version);
-            await store.SaveRunAsync(run, 0);
-            return run.Id;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            run.Fail(clock.GetUtcNow(), "Launch-time trust verification could not read the declared task.", run.Version);
-            await store.SaveRunAsync(run, 0);
-            return run.Id;
-        }
-
         var persistedVersion = run.Version;
         ExceptionDispatchInfo? callbackFailure = null;
-        ProcessResult result;
-        try
+        var trustChecked = false;
+        var process = runner.CreateExecution(run.Id, prepared);
+        return new RunOperation(run.Id, ExecuteOwnedAsync, process);
+
+        async Task<RunId> ExecuteOwnedAsync()
         {
-            result = await runner.ExecuteAsync(run.Id, prepared, async started =>
+            if (!trustChecked)
             {
+                // Once persisted, request cancellation must not abandon process ownership/status writes.
                 try
                 {
-                    run.Start(started.StartedAtUtc, started.ProcessId, run.Version);
-                    await store.SaveRunAsync(run, persistedVersion);
-                    persistedVersion = run.Version;
+                    var trusted = await catalog.GetTrustedTaskAsync(project.Id, experiment.Definition.TaskKey);
+                    if (trusted.Fingerprint != prepared.TaskFingerprint || trusted.ExecutablePath != prepared.ExecutablePath)
+                        throw new CatalogException("PreparationChanged", "The trusted task changed during preparation; prepare again.");
                 }
-                catch (Exception exception)
+                catch (CatalogException exception)
                 {
-                    callbackFailure = ExceptionDispatchInfo.Capture(exception);
-                    throw;
+                    run.Fail(clock.GetUtcNow(), $"{exception.Code}: {exception.Message}", run.Version);
+                    await store.SaveRunAsync(run, 0);
+                    return run.Id;
                 }
-            });
-            // An adapter must not swallow a failed acknowledgement and report success.
-            callbackFailure?.Throw();
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    run.Fail(clock.GetUtcNow(), "Launch-time trust verification could not read the declared task.", run.Version);
+                    await store.SaveRunAsync(run, 0);
+                    return run.Id;
+                }
+                trustChecked = true;
+            }
+            ProcessResult result;
+            try
+            {
+                result = await process.ExecuteAsync(async started =>
+                {
+                    try
+                    {
+                        run.Start(started.StartedAtUtc, started.ProcessId, run.Version);
+                        await store.SaveRunAsync(run, persistedVersion);
+                        persistedVersion = run.Version;
+                    }
+                    catch (Exception exception)
+                    {
+                        callbackFailure = ExceptionDispatchInfo.Capture(exception);
+                        throw;
+                    }
+                });
+                // An adapter must not swallow a failed acknowledgement and report success.
+                callbackFailure?.Throw();
+            }
+            catch (ProcessCleanupException)
+            {
+                // Process may still be alive. Keep the owner and retry cleanup explicitly.
+                throw;
+            }
+            catch (Exception) when (callbackFailure is not null)
+            {
+                // Once cleanup is confirmed, preserve the original acknowledgement error.
+                callbackFailure.Throw();
+                throw;
+            }
+            catch (Exception)
+            {
+                // Execution failures are distinct from callback/terminal persistence failures.
+                // Exception text may contain private paths or environment data.
+                result = new ProcessResult(null, false, "Process execution or result collection failed.");
+            }
+            var finishedAt = clock.GetUtcNow();
+            if (result.Canceled && result.FailureReason is null)
+                run.Cancel(finishedAt, run.Version);
+            else if (run.Status == RunStatus.Created)
+                run.Fail(finishedAt, result.FailureReason ?? "Process startup failed.", run.Version);
+            else if (result.TimedOut)
+                run.TimeOut(finishedAt, run.Version);
+            else if (result.FailureReason is not null || result.ExitCode != 0)
+                run.Fail(finishedAt, result.FailureReason ?? $"Process exited with code {result.ExitCode}.", run.Version, result.ExitCode);
+            else
+                // This increment requires successful stream draining, but has no metric/artifact protocol.
+                run.Succeed(finishedAt, 0, resultsValidated: true, run.Version);
+            await store.SaveRunAsync(run, persistedVersion);
+            return run.Id;
         }
-        catch (Exception) when (callbackFailure is not null)
-        {
-            // Preserve the persistence/domain error even if runner cleanup also failed.
-            callbackFailure.Throw();
-            throw;
-        }
-        catch (Exception)
-        {
-            // Execution failures are distinct from callback/terminal persistence failures.
-            // Exception text may contain private paths or environment data.
-            result = new ProcessResult(null, false, "Process execution or result collection failed.");
-        }
-        var finishedAt = clock.GetUtcNow();
-        if (run.Status == RunStatus.Created)
-            run.Fail(finishedAt, result.FailureReason ?? "Process startup failed.", run.Version);
-        else if (result.TimedOut)
-            run.TimeOut(finishedAt, run.Version);
-        else if (result.FailureReason is not null || result.ExitCode != 0)
-            run.Fail(finishedAt, result.FailureReason ?? $"Process exited with code {result.ExitCode}.", run.Version, result.ExitCode);
-        else
-            // This increment requires successful stream draining, but has no metric/artifact protocol.
-            run.Succeed(finishedAt, 0, resultsValidated: true, run.Version);
-        await store.SaveRunAsync(run, persistedVersion);
-        return run.Id;
     }
 
     private static bool SameDefinition(ExperimentDefinition left, ExperimentDefinition right) =>
