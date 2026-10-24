@@ -12,6 +12,190 @@ namespace ResearchLab.IntegrationTests;
 public sealed class RunExecutionTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecutorExceptionPersistsFailedWithoutInventingExitCode(bool started)
+    {
+        using var fixture = new TestWorkspace();
+        var (catalog, experiment) = await SeedAsync(fixture, "success");
+        await TrustAsync(catalog, experiment);
+        var runner = new DelegateRunner(async (_, onStarted) =>
+        {
+            if (started)
+                await onStarted(new ProcessStarted(123, DateTimeOffset.UtcNow));
+            throw new IOException("Synthetic private path must not be persisted.");
+        });
+        var id = await new RunExecution(fixture.Store, catalog, new WorkspaceInspector(), runner)
+            .StartRunAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
+        var run = (await fixture.Store.GetRunAsync(id, TestContext.Current.CancellationToken))!;
+        Assert.Equal(RunStatus.Failed, run.Status);
+        Assert.Equal(started ? 2 : 1, run.Version);
+        Assert.Equal(started, run.StartedAtUtc.HasValue);
+        Assert.Null(run.ExitCode);
+        Assert.NotEmpty(run.FailureReason!);
+        Assert.DoesNotContain("private path", run.FailureReason!);
+    }
+
+    [Theory]
+    [InlineData("Running", RunStatus.Created, "propagate")]
+    [InlineData("Running", RunStatus.Created, "wrap")]
+    [InlineData("Running", RunStatus.Created, "swallow")]
+    [InlineData("Succeeded", RunStatus.Running, "propagate")]
+    public async Task SqliteWriteFailurePropagatesWithoutBeingReclassified(string rejectedStatus, RunStatus retainedStatus, string callbackError)
+    {
+        using var fixture = new TestWorkspace();
+        var (catalog, experiment) = await SeedAsync(fixture, "wait", timeout: 1);
+        await TrustAsync(catalog, experiment);
+        var sql = rejectedStatus == "Running" ? """
+                CREATE TRIGGER reject_state BEFORE UPDATE ON Runs
+                WHEN NEW.Status = 1
+                BEGIN SELECT RAISE(ABORT, 'Synthetic SQLite failure'); END;
+                """ : """
+                CREATE TRIGGER reject_state BEFORE UPDATE ON Runs
+                WHEN NEW.Status = 2
+                BEGIN SELECT RAISE(ABORT, 'Synthetic SQLite failure'); END;
+                """;
+        await using (var db = Open(fixture))
+            await db.Database.ExecuteSqlRawAsync(sql, TestContext.Current.CancellationToken);
+        // A real process exercises cleanup when saving Running throws.
+        Process? owned = null;
+        var runner = new DelegateRunner(async (launch, onStarted) =>
+        {
+            try
+            {
+                return await new ProcessRunner().ExecuteAsync(launch, async started =>
+                {
+                    owned = Process.GetProcessById(started.ProcessId);
+                    await onStarted(started);
+                });
+            }
+            catch (DbUpdateException) when (callbackError == "wrap")
+            { throw new IOException("Synthetic cleanup failure masking a SQLite error."); }
+            catch (DbUpdateException) when (callbackError == "swallow")
+            { return new ProcessResult(0, false, null); }
+        });
+        // Use success for the terminal-write case without replacing the trusted launch.
+        if (rejectedStatus == "Succeeded")
+        {
+            fixture.WriteConfiguration(ExecutableName, ["success"]);
+            await TrustAsync(catalog, experiment);
+        }
+        try
+        {
+            var error = await Assert.ThrowsAsync<DbUpdateException>(() =>
+                new RunExecution(fixture.Store, catalog, new WorkspaceInspector(), runner)
+                    .StartRunAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken));
+            Assert.Contains("Synthetic SQLite failure", error.InnerException!.Message);
+            Assert.NotNull(owned);
+            Assert.True(owned.HasExited);
+            await using var check = Open(fixture);
+            Assert.Equal(retainedStatus, (await check.Set<Run>().SingleAsync(TestContext.Current.CancellationToken)).Status);
+        }
+        finally { owned?.Dispose(); }
+    }
+
+    [Fact]
+    public async Task CompletedProcessDoesNotTimeOutWhileStartupAcknowledgementIsDelayed()
+    {
+        using var fixture = new TestWorkspace();
+        var (catalog, experiment) = await SeedAsync(fixture, "success", timeout: 2);
+        await TrustAsync(catalog, experiment);
+        var prepared = await new RunPreparation(catalog).PrepareAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
+        var result = await new ProcessRunner().ExecuteAsync(prepared, async started =>
+        {
+            using var owned = Process.GetProcessById(started.ProcessId);
+            await owned.WaitForExitAsync(TestContext.Current.CancellationToken);
+            await Task.Delay(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+        });
+        Assert.Equal(0, result.ExitCode);
+        Assert.False(result.TimedOut);
+        Assert.Null(result.FailureReason);
+    }
+
+    [Fact]
+    public async Task FailureToReadExecutableDuringFinalTrustCheckPersistsFailed()
+    {
+        using var fixture = new TestWorkspace();
+        var (catalog, experiment) = await SeedAsync(fixture, "success");
+        await TrustAsync(catalog, experiment);
+        FileStream? locked = null;
+        var inspector = new ChangingInspector(() =>
+        {
+            locked = new FileStream(Path.Combine(fixture.Workspace, ExecutableName), FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            return Task.CompletedTask;
+        });
+        try
+        {
+            var id = await new RunExecution(fixture.Store, catalog, inspector, new NeverRunner())
+                .StartRunAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
+            var run = (await fixture.Store.GetRunAsync(id, TestContext.Current.CancellationToken))!;
+            Assert.Equal(RunStatus.Failed, run.Status);
+            Assert.Null(run.ProcessId);
+            Assert.DoesNotContain(fixture.Workspace, run.FailureReason!);
+        }
+        finally { locked?.Dispose(); }
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData(0, "Synthetic result collection failure.")]
+    public async Task IncompleteResultCannotProduceSucceeded(int? exitCode, string? reason)
+    {
+        using var fixture = new TestWorkspace();
+        var (catalog, experiment) = await SeedAsync(fixture, "success");
+        await TrustAsync(catalog, experiment);
+        var runner = new DelegateRunner(async (_, onStarted) =>
+        {
+            await onStarted(new ProcessStarted(123, DateTimeOffset.UtcNow));
+            return new ProcessResult(exitCode, false, reason);
+        });
+        var id = await new RunExecution(fixture.Store, catalog, new WorkspaceInspector(), runner)
+            .StartRunAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken);
+        Assert.Equal(RunStatus.Failed, (await fixture.Store.GetRunAsync(id, TestContext.Current.CancellationToken))!.Status);
+    }
+
+    [Fact]
+    public async Task TimeoutStopsLiveProcessTreeAndDrainsInheritedPipes()
+    {
+        using var fixture = new TestWorkspace();
+        var (catalog, experiment) = await SeedAsync(fixture, "tree", timeout: 3);
+        await TrustAsync(catalog, experiment);
+        Process? root = null;
+        Process? child = null;
+        var runner = new DelegateRunner((launch, onStarted) => new ProcessRunner().ExecuteAsync(launch, async started =>
+        {
+            root = Process.GetProcessById(started.ProcessId);
+            await onStarted(started);
+            var pidFile = Path.Combine(fixture.Workspace, "synthetic-child.pid");
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            while (!File.Exists(pidFile))
+                await Task.Delay(10, deadline.Token);
+            child = Process.GetProcessById(int.Parse(await File.ReadAllTextAsync(pidFile, deadline.Token), System.Globalization.CultureInfo.InvariantCulture));
+        }));
+        try
+        {
+            var id = await new RunExecution(fixture.Store, catalog, new WorkspaceInspector(), runner)
+                .StartRunAsync(experiment.Id, new Dictionary<string, ParameterValue>(), TestContext.Current.CancellationToken)
+                .WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
+            Assert.Equal(RunStatus.TimedOut, (await fixture.Store.GetRunAsync(id, TestContext.Current.CancellationToken))!.Status);
+            Assert.NotNull(root);
+            Assert.True(root.HasExited);
+            Assert.NotNull(child);
+            await child.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            // Clean up only process handles obtained from this synthetic fixture.
+            if (root is not null && !root.HasExited)
+                root.Kill(entireProcessTree: true);
+            if (child is not null && !child.HasExited)
+                child.Kill(entireProcessTree: true);
+            root?.Dispose();
+            child?.Dispose();
+        }
+    }
+
+    [Theory]
     [InlineData("success", RunStatus.Succeeded, 0)]
     [InlineData("fail", RunStatus.Failed, 7)]
     [InlineData("streams", RunStatus.Succeeded, 0)]
@@ -221,6 +405,11 @@ public sealed class RunExecutionTests
     {
         public Task<ProcessResult> ExecuteAsync(PreparedRun launch, Func<ProcessStarted, Task> onStarted) =>
             throw new InvalidOperationException("Executor must not be reached.");
+    }
+
+    private sealed class DelegateRunner(Func<PreparedRun, Func<ProcessStarted, Task>, Task<ProcessResult>> execute) : IProcessRunner
+    {
+        public Task<ProcessResult> ExecuteAsync(PreparedRun launch, Func<ProcessStarted, Task> onStarted) => execute(launch, onStarted);
     }
 
     private sealed class ChangingInspector(Func<Task> change) : IWorkspaceInspector

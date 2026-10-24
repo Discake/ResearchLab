@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 
 // Synthetic subprocess fixture for integration tests, not a ResearchLab CLI or sample evidence.
@@ -21,6 +22,17 @@ switch (args.FirstOrDefault())
         return 0;
     case "wait":
         await Task.Delay(TimeSpan.FromSeconds(30));
+        return 0;
+    case "tree":
+        using (var child = Process.Start(new ProcessStartInfo(Environment.ProcessPath!)
+        {
+            UseShellExecute = false,
+            ArgumentList = { "wait" }
+        })!)
+        {
+            await File.WriteAllTextAsync("synthetic-child.pid", child.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            await Task.Delay(TimeSpan.FromSeconds(30));
+        }
         return 0;
     default:
         return 10;

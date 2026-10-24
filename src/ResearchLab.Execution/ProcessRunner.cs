@@ -49,14 +49,17 @@ public sealed class ProcessRunner : IProcessRunner
         string? drainFailure = null;
         var stdout = DrainAsync(process.StandardOutput.BaseStream);
         var stderr = DrainAsync(process.StandardError.BaseStream);
+        // Observe exit immediately: a slow acknowledgement must not turn an already
+        // completed process/drain into a timeout when WaitForExitAsync is first called.
+        var completion = Task.WhenAll(process.WaitForExitAsync(deadline.Token), stdout, stderr);
         try
         {
             process.StandardInput.Close();
             await onStarted(started);
             try
             {
-                await Task.WhenAll(process.WaitForExitAsync(deadline.Token), stdout, stderr);
-                return new(process.ExitCode, deadline.IsCancellationRequested && drainFailure is null, drainFailure);
+                await completion.WaitAsync(deadline.Token);
+                return new(process.ExitCode, false, drainFailure);
             }
             catch (OperationCanceledException) when (deadline.IsCancellationRequested)
             {
@@ -68,8 +71,13 @@ public sealed class ProcessRunner : IProcessRunner
         {
             // Includes failure to persist Running in the Application callback.
             deadline.Cancel();
-            await StopAsync(process);
-            await Task.WhenAll(stdout, stderr);
+            try { await StopAsync(process); }
+            finally
+            {
+                // Bound cleanup even if an inherited pipe does not respond to cancellation.
+                try { await completion.WaitAsync(CleanupTimeout); }
+                catch (OperationCanceledException) when (deadline.IsCancellationRequested) { }
+            }
         }
 
         async Task DrainAsync(Stream stream)
@@ -77,6 +85,7 @@ public sealed class ProcessRunner : IProcessRunner
             var buffer = new byte[8192];
             try
             {
+                // Cancellation is not EOF: incomplete collection must never look successful.
                 int count;
                 while ((count = await stream.ReadAsync(buffer, deadline.Token)) != 0)
                 {
@@ -88,7 +97,6 @@ public sealed class ProcessRunner : IProcessRunner
                     }
                 }
             }
-            catch (OperationCanceledException) when (deadline.IsCancellationRequested) { }
             catch (IOException)
             {
                 Interlocked.CompareExchange(ref drainFailure, "Process output could not be drained.", null);

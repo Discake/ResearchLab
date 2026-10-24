@@ -34,6 +34,10 @@ are structurally compared against preparation. Created is saved before handoff; 
 rechecked against the prepared fingerprint immediately before execution. Later Experiment
 edits cannot rewrite the Run. Persistence uses the last saved version and has no automatic
 conflict/launch retries. Database errors propagate instead of claiming a saved outcome.
+Exceptions from the executor itself produce Failed with a generic diagnostic and no
+invented exit code. A failed startup acknowledgement remains the original application/
+persistence error even if the adapter wraps or swallows it; no terminal write is attempted.
+An I/O/access error in the final trust check fails Created without launching the process.
 
 The runner uses an explicit executable, literal ArgumentList, UseShellExecute=false and
 the validated workspace directory. Windows accepts `.exe` entry points only: `.cmd`/`.bat`
@@ -51,6 +55,10 @@ discarded and never stored. A fixed 1 MiB combined byte cap terminates excessive
 Failed. The configured timeout bounds execution/draining and produces TimedOut after
 termination. Cleanup attempts process-tree termination and waits up to five seconds for
 the root process; inability to stop is surfaced, never claimed as a successful completion.
+Exit and both drains are observed before awaiting startup acknowledgement: completion
+already confirmed before the deadline remains successful even if acknowledgement is slow.
+Canceled reads are incomplete collection, not EOF. Cleanup also bounds waiting for the
+combined exit/drain tasks to five seconds, including when process termination throws.
 
 CancellationToken is used only up to initial insertion. Once Created is persisted the
 workflow owns execution and state writes until completion; canceling the calling request
@@ -65,3 +73,6 @@ Tests use a dedicated synthetic executable fixture under tests, not a product CL
 experimental evidence. They cover real SQLite ordering/outcomes, startup failure, missing
 trust, parameter errors, changed executable, literal arguments, parameter transport,
 both output streams, timeout, output limits and callback-failure cleanup.
+Regression tests also cover executor exceptions before/after startup, real SQLite write
+failures at startup/completion, delayed acknowledgement, final trust-read failure,
+incomplete results, and timeout cleanup of a live root with a child inheriting both pipes.

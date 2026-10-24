@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using ResearchLab.Domain;
 
 namespace ResearchLab.Application;
@@ -36,14 +37,47 @@ public sealed class RunExecution(IResearchStore store, ProjectCatalog catalog, I
             await store.SaveRunAsync(run, 0);
             return run.Id;
         }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            run.Fail(clock.GetUtcNow(), "Launch-time trust verification could not read the declared task.", run.Version);
+            await store.SaveRunAsync(run, 0);
+            return run.Id;
+        }
 
         var persistedVersion = run.Version;
-        var result = await runner.ExecuteAsync(prepared, async started =>
+        ExceptionDispatchInfo? callbackFailure = null;
+        ProcessResult result;
+        try
         {
-            run.Start(started.StartedAtUtc, started.ProcessId, run.Version);
-            await store.SaveRunAsync(run, persistedVersion);
-            persistedVersion = run.Version;
-        });
+            result = await runner.ExecuteAsync(prepared, async started =>
+            {
+                try
+                {
+                    run.Start(started.StartedAtUtc, started.ProcessId, run.Version);
+                    await store.SaveRunAsync(run, persistedVersion);
+                    persistedVersion = run.Version;
+                }
+                catch (Exception exception)
+                {
+                    callbackFailure = ExceptionDispatchInfo.Capture(exception);
+                    throw;
+                }
+            });
+            // An adapter must not swallow a failed acknowledgement and report success.
+            callbackFailure?.Throw();
+        }
+        catch (Exception) when (callbackFailure is not null)
+        {
+            // Preserve the persistence/domain error even if runner cleanup also failed.
+            callbackFailure.Throw();
+            throw;
+        }
+        catch (Exception)
+        {
+            // Execution failures are distinct from callback/terminal persistence failures.
+            // Exception text may contain private paths or environment data.
+            result = new ProcessResult(null, false, "Process execution or result collection failed.");
+        }
         var finishedAt = clock.GetUtcNow();
         if (run.Status == RunStatus.Created)
             run.Fail(finishedAt, result.FailureReason ?? "Process startup failed.", run.Version);
