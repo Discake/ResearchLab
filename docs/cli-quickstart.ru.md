@@ -68,7 +68,7 @@ $LASTEXITCODE
 $configPath = Join-Path $demo.workspace 'researchlab.json'
 $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
 $config.tasks.benchmark.timeoutSeconds = 1
-[IO.File]::WriteAllText($configPath, ($config | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding($false)))
+[IO.File]::WriteAllText($configPath, ($config | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding($false)))
 
 & dotnet $demo.cli @common run start $demo.experimentId --parameters '{"delayMilliseconds":30000}'
 $LASTEXITCODE
