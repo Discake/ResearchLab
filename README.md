@@ -89,7 +89,8 @@ for configuration, data safety and exit codes.
 
 ## Start a real experiment from the console
 
-The [foreground guide](docs/foreground-run.md) / [запуск через CLI](docs/foreground-run.ru.md)
+The [quickstart and recovery guide](docs/cli-quickstart.md) / [краткое руководство и recovery](docs/cli-quickstart.ru.md)
+provides the shortest smoke test; the [foreground guide](docs/foreground-run.md) / [запуск через CLI](docs/foreground-run.ru.md)
 walks from empty storage through explicit `database init`, `project import` and
 `experiment create` to `run start <experiment-id> --parameters <json-object>` using
 the supplied real console example. Each start displays the executable/configuration
