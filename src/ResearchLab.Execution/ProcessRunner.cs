@@ -28,6 +28,10 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
     public Task<ProcessResult> ExecuteAsync(RunId runId, PreparedRun launch, Func<ProcessStarted, Task> onStarted) =>
         CreateExecution(runId, launch).ExecuteAsync(onStarted);
 
+    public Task<ProcessResult> ExecuteAsync(RunId runId, PreparedRun launch,
+        Func<ProcessStarted, Task> onStarted, IProcessOutputSink sink) =>
+        CreateExecution(runId, launch).ExecuteAsync(onStarted, sink);
+
     private sealed class OwnedProcess(RunLogFiles logs, RunId runId, PreparedRun launch,
         IProcessTerminator? terminator, TimeProvider clock, IWindowsJobControl jobs,
         Func<Stream, Stream>? logWriter) : IProcessExecution
@@ -43,6 +47,11 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
         private IRunProcess? process;
         private Stream? output;
         private Stream? error;
+        private Stream? protocol;
+        private StructuredStdout? structured;
+        private readonly TaskCompletionSource<bool> startedAcknowledged = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private ExceptionDispatchInfo? collectionFailure;
+        private int diagnosticCount;
         private Task? drains;
         private ITimer? deadline;
         private bool attempted;
@@ -75,7 +84,13 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
             }
         }
 
-        public async Task<ProcessResult> ExecuteAsync(Func<ProcessStarted, Task> onStarted)
+        public Task<ProcessResult> ExecuteAsync(Func<ProcessStarted, Task> onStarted) =>
+            ExecuteCoreAsync(onStarted, null);
+
+        public Task<ProcessResult> ExecuteAsync(Func<ProcessStarted, Task> onStarted, IProcessOutputSink outputSink) =>
+            ExecuteCoreAsync(onStarted, outputSink);
+
+        private async Task<ProcessResult> ExecuteCoreAsync(Func<ProcessStarted, Task> onStarted, IProcessOutputSink? outputSink)
         {
             ArgumentNullException.ThrowIfNull(onStarted);
             await driver.WaitAsync();
@@ -84,6 +99,7 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
                 if (released)
                 {
                     startupFailure?.Throw();
+                    collectionFailure?.Throw();
                     return result!;
                 }
                 if (!attempted)
@@ -100,11 +116,17 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
                         try
                         {
                             (output, error) = logs.Create(runId);
+                            if (outputSink is not null)
+                            {
+                                protocol = logs.CreateProtocol(runId);
+                                structured = new StructuredStdout(outputSink, startedAcknowledged.Task, ReportAsync);
+                            }
                             var outputDirectory = logs.CreateOutputDirectory(runId);
                             if (logWriter is not null)
                             {
                                 output = logWriter(output);
                                 error = logWriter(error);
+                                if (protocol is not null) protocol = logWriter(protocol);
                             }
                             if (OperatingSystem.IsWindows() && !string.Equals(Path.GetExtension(launch.ExecutablePath), ".exe", StringComparison.OrdinalIgnoreCase))
                                 throw new InvalidOperationException("Native executable required.");
@@ -134,19 +156,25 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
                     try
                     {
                         var started = new ProcessStarted(process.Id, clock.GetUtcNow());
-                        stdoutDrain = DrainAsync(process.Stdout, output!);
-                        stderrDrain = DrainAsync(process.Stderr, error!);
+                        stdoutDrain = DrainAsync(process.Stdout, output!, isStdout: true);
+                        stderrDrain = DrainAsync(process.Stderr, error!, isStdout: false);
                         deadline = clock.CreateTimer(_ => Choose(Outcome.TimedOut), null,
                             launch.ExperimentSnapshot.Task.Timeout, Timeout.InfiniteTimeSpan);
                         process.CloseInput();
                         await onStarted(started);
+                        startedAcknowledged.TrySetResult(true);
                     }
                     catch (Exception exception)
                     {
                         startupFailure = ExceptionDispatchInfo.Capture(exception);
                         Choose(Outcome.Failed);
                     }
-                    finally { drains = Task.WhenAll(stdoutDrain ?? Task.CompletedTask, stderrDrain ?? Task.CompletedTask); }
+                    finally
+                    {
+                        // Failure unblocks raw drains but never enables metric delivery.
+                        startedAcknowledged.TrySetResult(false);
+                        drains = Task.WhenAll(stdoutDrain ?? Task.CompletedTask, stderrDrain ?? Task.CompletedTask);
+                    }
                 }
 
                 // One foreground driver; no detached wait retaining a native process reference.
@@ -178,6 +206,7 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
                     failure, outcome == Outcome.Canceled && failure is null);
                 Release();
                 startupFailure?.Throw();
+                collectionFailure?.Throw();
                 return result;
             }
             catch (Exception exception) when (exception is not ProcessCleanupException && process is not null && !released)
@@ -228,9 +257,10 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
             catch (OperationCanceledException) { throw new ProcessCleanupException(this); }
         }
 
-        private async Task DrainAsync(Stream stream, Stream destination)
+        private async Task DrainAsync(Stream stream, Stream destination, bool isStdout)
         {
             var buffer = new byte[8192];
+            var eof = false;
             try
             {
                 int count;
@@ -240,6 +270,8 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
                     var retained = (int)Math.Clamp(OutputLimitBytes - (total - count), 0, count);
                     if (retained > 0)
                         await destination.WriteAsync(buffer.AsMemory(0, retained), reads.Token);
+                    if (isStdout && structured is not null && retained > 0)
+                        await CollectAsync(() => structured.FeedAsync(buffer.AsMemory(0, retained)));
                     if (total > OutputLimitBytes)
                     {
                         Interlocked.CompareExchange(ref drainFailure, "Process output exceeded the 1 MiB combined limit.", null);
@@ -247,6 +279,7 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
                         return;
                     }
                 }
+                eof = true;
                 await destination.FlushAsync(reads.Token);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or OperationCanceledException or ObjectDisposedException)
@@ -254,6 +287,39 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
                 Interlocked.CompareExchange(ref drainFailure, "Process output could not be read or saved.", null);
                 Choose(Outcome.Failed);
             }
+            finally
+            {
+                if (isStdout && structured is not null)
+                    await CollectAsync(() => structured.CompleteAsync(eof));
+            }
+        }
+
+        private async Task CollectAsync(Func<Task> collect)
+        {
+            if (collectionFailure is not null) return;
+            try { await collect(); }
+            catch (Exception exception)
+            {
+                collectionFailure ??= ExceptionDispatchInfo.Capture(exception);
+                Choose(Outcome.Failed);
+            }
+        }
+
+        private async Task ReportAsync(IReadOnlyList<ProtocolDiagnostic> diagnostics)
+        {
+            if (diagnostics.Count == 0) return;
+            foreach (var diagnostic in diagnostics)
+            {
+                // 256 problem records plus a single suppression marker. No payloads/names/paths.
+                if (diagnosticCount > 256) break;
+                var code = diagnosticCount == 256 ? "DiagnosticsTruncated" : diagnostic.Code;
+                if (code.Length > 64)
+                    throw new InvalidOperationException("Diagnostic code exceeds its limit.");
+                var bytes = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { line = diagnostic.Line, code }) + "\n");
+                await protocol!.WriteAsync(bytes);
+                diagnosticCount++;
+            }
+            await protocol!.FlushAsync();
         }
 
         private void Release()
@@ -267,8 +333,12 @@ public sealed class ProcessRunner(RunLogFiles logs, IProcessTerminator? terminat
                 try { error?.Dispose(); }
                 finally
                 {
-                    process?.Dispose();
-                    reads.Dispose();
+                    try { protocol?.Dispose(); }
+                    finally
+                    {
+                        process?.Dispose();
+                        reads.Dispose();
+                    }
                 }
             }
         }

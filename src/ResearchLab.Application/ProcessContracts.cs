@@ -22,6 +22,9 @@ public interface IProcessExecution
     // throw ProcessCleanupException, retaining ownership and pending I/O. Never swallow a
     // failed acknowledgement. Execution defines platform-specific containment guarantees.
     Task<ProcessResult> ExecuteAsync(Func<ProcessStarted, Task> onStarted);
+    // Outputless adapters retain compatibility. Stream-capable adapters override this overload.
+    Task<ProcessResult> ExecuteAsync(Func<ProcessStarted, Task> onStarted, IProcessOutputSink output) =>
+        ExecuteAsync(onStarted);
     // Thread-safe, idempotent control intent, not confirmation of termination.
     bool RequestCancellation();
 }

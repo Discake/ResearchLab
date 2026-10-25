@@ -42,6 +42,7 @@ public sealed class RunExecution(IResearchStore store, ProjectCatalog catalog, I
             ExceptionDispatchInfo? callbackFailure = null;
             var trustChecked = false;
             var process = runner.CreateExecution(run.Id, prepared);
+            var collector = new RunMetricCollector(store, run.Id, clock);
             return new RunOperation(run.Id, ExecuteOwnedAsync, process, session);
 
             async Task<RunId> ExecuteOwnedAsync()
@@ -91,13 +92,19 @@ public sealed class RunExecution(IResearchStore store, ProjectCatalog catalog, I
                             callbackFailure = ExceptionDispatchInfo.Capture(exception);
                             throw;
                         }
-                    });
+                    }, collector);
+                    collector.Failure?.Throw();
                     // An adapter must not swallow a failed acknowledgement and report success.
                     callbackFailure?.Throw();
                 }
                 catch (ProcessCleanupException)
                 {
                     // Process may still be alive. Keep the owner and retry cleanup explicitly.
+                    throw;
+                }
+                catch (Exception) when (collector.Failure is not null)
+                {
+                    collector.Failure.Throw();
                     throw;
                 }
                 catch (Exception) when (callbackFailure is not null)
@@ -112,6 +119,17 @@ public sealed class RunExecution(IResearchStore store, ProjectCatalog catalog, I
                     // Exception text may contain private paths or environment data.
                     result = new ProcessResult(null, false, "Process execution or result collection failed.");
                 }
+                if (collector.Ingestion is not null)
+                {
+#if RESEARCHLAB_CRASH_TESTS
+                    CrashTestCheckpoint.Reach("before-terminal", run.ProcessId);
+#endif
+                    await collector.Ingestion.CompleteAsync(result);
+#if RESEARCHLAB_CRASH_TESTS
+                    CrashTestCheckpoint.Reach("after-terminal", run.ProcessId);
+#endif
+                    return run.Id;
+                }
                 var finishedAt = clock.GetUtcNow();
                 if (result.Canceled && result.FailureReason is null)
                     run.Cancel(finishedAt, run.Version);
@@ -122,7 +140,7 @@ public sealed class RunExecution(IResearchStore store, ProjectCatalog catalog, I
                 else if (result.FailureReason is not null || result.ExitCode != 0)
                     run.Fail(finishedAt, result.FailureReason ?? $"Process exited with code {result.ExitCode}.", run.Version, result.ExitCode);
                 else
-                    // This increment requires successful stream draining, but has no metric/artifact protocol.
+                    // Stream collection and all metric flushes have completed.
                     run.Succeed(finishedAt, 0, resultsValidated: true, run.Version);
 #if RESEARCHLAB_CRASH_TESTS
                 CrashTestCheckpoint.Reach("before-terminal", run.ProcessId);

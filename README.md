@@ -2,7 +2,7 @@
 
 Local-first research platform connecting source code, experiment runs, recorded
 evidence and publishable Research Stories. This repository currently implements
-**M0–M3: bootstrap, domain core, SQLite/import and trusted local execution**.
+**M0–M3 plus M4.1–M4.3: domain core, SQLite/import, trusted local execution and structured metric ingestion**.
 M3 includes preparation, trusted foreground execution, managed cancellation, local recovery and verified Windows Job containment. The application API
 is usable from .NET code and the foreground CLI. A UI is not implemented yet.
 
@@ -155,8 +155,9 @@ Active and unknown owners are skipped; no process is killed. M4 artifact storage
 
 ## Кратко по-русски
 
-Реализованы M0–M3: доменное ядро, SQLite/EF Core, импорт, каталог экспериментов
-и явное подтверждение доверия. M3 дополнен подготовкой и минимальным доверенным исполнением
+Реализованы M0–M3 и M4.1–M4.3: доменное ядро, SQLite/EF Core, импорт, каталог экспериментов
+и явное подтверждение доверия. Структурированные метрики stdout сохраняются в SQLite.
+M3 дополнен подготовкой и минимальным доверенным исполнением
 с сохранением состояний Run и раздельных ограниченных логов stdout/stderr.
 Доступ к логам, деталям Run и страницам истории предоставляется через Application.
 M3.3 восстанавливает Created/Running подтверждённо завершённых сеансов в Interrupted;
@@ -173,7 +174,7 @@ API доступен из .NET и foreground CLI; UI пока нет.
 Smoke-тест допускает только System.Runtime, System.Collections и System.Linq.
 Использовано согласованное исправление EN/RU: ошибка запуска переводит Run
 из Created сразу в Failed. Интеграционные тесты используют реальные временные БД
-и Git-репозитории; проверены на Windows. Импорт не запускает задачи. Следующий этап — M4.
+и Git-репозитории; проверены на Windows. Импорт не запускает задачи. M4 начат: парсер, ограниченный приём и реальный stdout; артефакты и графики ещё не реализованы.
 
 M3.6 adds `run recover` and `<data-dir>/<RunId:N>/output` via `RESEARCHLAB_OUTPUT_DIR`, preserving workspace CWD. [Contract and remaining limits](docs/local-run-completion.md).
 
@@ -199,9 +200,17 @@ M3.7e (2026-10-25): restore, build, все 302 теста без пропуск�
 включая отсутствие ручного Ctrl+C и ограничения JSON в PowerShell 5.1.
 
 M4.2 provides bounded durable metric ingestion through Application, with atomic SQLite
-batches and the existing Run version fence. ProcessRunner integration remains pending.
+batches and the existing Run version fence. M4.3 connects ProcessRunner below.
 [Contract, performance and integration limits](docs/metric-ingestion.md).
 
 M4.2 добавляет ограниченный долговременный приём метрик через Application: атомарные
-пакеты SQLite и существующая проверка версии Run. ProcessRunner пока не подключён.
+пакеты SQLite и существующая проверка версии Run. Подключение ProcessRunner описано ниже в M4.3.
 [Контракт, производительность и границы интеграции](docs/metric-ingestion.ru.md).
+
+M4.3 now connects real stdout to M4.1/M4.2, with a durable Running acknowledgement
+barrier, bounded protocol diagnostics and a final flush before terminal persistence.
+[Sequence, failure handling and limits](docs/structured-execution.md).
+
+M4.3 подключает настоящий stdout к M4.1/M4.2: барьер сохранения Running, ограниченная
+диагностика и финальный flush перед terminal persistence.
+[Последовательность, обработка ошибок и ограничения](docs/structured-execution.ru.md).

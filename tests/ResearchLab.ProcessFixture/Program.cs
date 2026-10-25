@@ -2,6 +2,9 @@ using System.Diagnostics;
 using System.Text.Json;
 
 // Synthetic subprocess fixture for integration tests, not a ResearchLab CLI or sample evidence.
+if (args.FirstOrDefault()?.StartsWith("metric-", StringComparison.Ordinal) == true)
+    return await MetricFixture.RunAsync(args[0]);
+
 switch (args.FirstOrDefault())
 {
     case "crash-root" when OperatingSystem.IsWindows():

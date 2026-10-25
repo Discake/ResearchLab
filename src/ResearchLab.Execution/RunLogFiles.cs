@@ -53,12 +53,16 @@ public sealed class RunLogFiles : IRunLogFiles
         return directory;
     }
 
+    internal FileStream CreateProtocol(RunId runId) =>
+        CreateFile(Path.Combine(DirectoryPath(runId), "protocol.log"));
+
     public Stream OpenRead(RunId runId, RunLogStream stream)
     {
         var name = stream switch
         {
             RunLogStream.Stdout => "stdout.log",
             RunLogStream.Stderr => "stderr.log",
+            RunLogStream.Protocol => "protocol.log",
             _ => throw new ArgumentOutOfRangeException(nameof(stream))
         };
         var path = Path.Combine(DirectoryPath(runId), name);

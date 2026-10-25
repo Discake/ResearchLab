@@ -18,8 +18,7 @@ process, or change M3 execution. Call its async methods serially and await each 
   flushes too. Rejected events consume neither Sequence nor Version. Incompatible
   units, including null versus a named unit, do not discard valid neighbors.
 - `CompleteAsync(ProcessResult)` flushes first, then Application chooses and saves
-  Succeeded/Failed/TimedOut/Canceled using existing domain transitions. This is an
-  isolated Application API for future workflow integration, not a ProcessRunner hook.
+  Succeeded/Failed/TimedOut/Canceled using existing domain transitions. Application owns this transition; ProcessRunner never calls domain status methods.
   Persisted evidence survives unsuccessful outcomes and a failed terminal write.
 - Storage failures propagate as exceptions. `VersionConflict` is a `CatalogException`;
   SQLite errors retain their original exception. After a flush/completion error the
@@ -81,16 +80,13 @@ reopening, series/repeated step/time ordering, unit rejection, unsuccessful outc
 read-only failure, trigger-induced batch rollback and terminal failure, competing
 versions, bounded windows and interval/size/explicit flush. Fixtures are synthetic.
 
-Future ProcessRunner integration must deliver parsed events serially with backpressure,
-consume every flush diagnostic, drain collection, and transfer sole ownership of the
-Run/version to this Application workflow. The existing M3 RunExecution owns a separate
-Run instance today and must not keep writing a stale version after ingestion. Fatal
-persistence errors must reach that workflow even if a process adapter catches callback
-exceptions. Cleanup, cancellation, recovery, success validation and interrupted buffered
-batches still require integration work; none is claimed here. Idle flush scheduling and
-history paging for readers remain outside this increment.
+M4.3 now connects the real ProcessRunner: serial stdout delivery with backpressure,
+a durable Running acknowledgement barrier, bounded diagnostics and final flush before
+terminal persistence. RunExecution transfers metric/terminal ownership to ingestion
+and preserves callback storage errors. See [structured execution](structured-execution.md).
+Idle flush scheduling, crash replay of buffered events and reader history paging remain outside this increment.
 
-## Verification — 2026-10-25
+## M4.2 verification — 2026-10-25
 
 Final commands succeeded on this Windows workspace:
 

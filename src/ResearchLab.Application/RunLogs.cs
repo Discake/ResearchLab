@@ -2,7 +2,7 @@ using ResearchLab.Domain;
 
 namespace ResearchLab.Application;
 
-public enum RunLogStream { Stdout, Stderr }
+public enum RunLogStream { Stdout, Stderr, Protocol }
 
 // Paths are relative to the configured private log root, never arbitrary host paths.
 public sealed record RunLogPaths(string Stdout, string Stderr);
