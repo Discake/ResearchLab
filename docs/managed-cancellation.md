@@ -57,16 +57,17 @@ only after confirmed cleanup; Application maps them to a sanitized Failed diagno
 ## Arbitration and terminal evidence
 
 A per-attempt lock serializes startup, cancellation and deadline selection. The first
-accepted cause wins. Before accepting a late cancel/deadline, the runner checks OS root
-exit: an already exited root keeps its natural result. If cancel/deadline was selected
-while the root was live, subsequent exit confirms that cause, even if it occurs before
-the kill call. Repeated control requests and late timer callbacks cannot select a new cause.
+accepted cause wins. Before accepting a late cancel/deadline, the runner checks completion:
+on Windows this requires root exit/code and an empty owned Job, so a dead root with live
+descendants remains cancelable. Non-Windows checks root exit. If control was accepted before
+completion, later exit does not change its cause. Repeated requests and late timer callbacks
+cannot select another cause. See [Windows group evidence](windows-group-lifecycle.md).
 Startup acknowledgement is persisted as Running before any terminal update; controls may
 arrive while acknowledgement is pending, but terminal handling waits for it.
 
 - Cancellation before OS startup produces Created → Canceled, without PID or logs.
-- Cancellation with confirmed root exit and successful collection produces Canceled.
-- Deadline with confirmed root exit and successful collection produces TimedOut.
+- Cancellation with confirmed execution completion and successful collection produces Canceled.
+- Deadline with confirmed execution completion and successful collection produces TimedOut.
 - Natural exit zero and completed collection produce Succeeded; nonzero exit produces Failed.
 - Essential collection failure produces Failed even if cancel/deadline initiated shutdown.
 - Unconfirmed stop/cleanup produces an exception and **no terminal write**. Running remains
@@ -82,20 +83,22 @@ save errors propagate and are not automatically replayed or reclassified.
 
 ## Cleanup limits and limitations
 
-Execution attempts `Kill(entireProcessTree: true)` for a live root and waits at most five
-seconds for root exit. After confirmed exit it waits separately at most five seconds for
-both drains. A failed/denied kill while the root is live, or an expired wait, raises
+On Windows Execution attempts `TerminateJobObject` and confirms root exit plus zero Job
+accounting, releasing its root handle after saving the exit code. Non-Windows retains
+`Kill(entireProcessTree: true)` and root-exit confirmation. Forced-cleanup confirmation and
+then both drains are bounded separately to five seconds. A denied stop without completion,
+unavailable group evidence, or an expired wait raises
 `ProcessCleanupException`. Handles, pending I/O, the selected cause and acknowledgement
 error remain on the same owner. A drain timeout cancels pending reads/writes and closes
 read pipes; a retry checks settled I/O with the same bound. There is no unbounded fallback
 wait. These bounds cover asynchronous waits, not OS kill syscall latency, filesystem close
 latency or Application database callbacks. No automatic retry loop or worker is created.
 
-The termination evidence is **OS root exit plus settled collection**, with successful
-collection required for Canceled/TimedOut. Tree termination is best effort: .NET does not
-prove that all descendants have exited; detached children or descendants after an already
-exited root are not guaranteed stopped. This contract does not add OS job objects or claim
-process isolation. A host must retain ownership and address cleanup failures explicitly;
+Windows evidence is **OS root exit/code, zero active Job processes and settled collection**,
+with successful collection required for Canceled/TimedOut. Actual Job loss cannot be repaired
+by trusting EOF or stored PIDs. Non-Windows still offers only root exit and settled collection;
+its best-effort .NET tree kill does not prove descendant termination after root exit.
+Neither backend is a security sandbox. A host must retain ownership and address cleanup failures explicitly;
 request cancellation never disposes the owner or cancels mandatory status writes.
 M3.3 [local recovery](run-recovery.md) now records verified ownership loss as Interrupted,
 including ambiguous Created startup. It does not confirm or terminate orphan children.

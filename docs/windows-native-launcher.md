@@ -1,8 +1,9 @@
 # M3.7b — isolated Windows native launcher
 
-`WindowsNativeProcessLauncher` is internal to Execution and is **not wired to ProcessRunner
-or the CLI**. Domain, Application lifecycle, recovery and SQLite are unchanged. This is
-the launch/resource-ownership increment; group completion belongs to M3.7c.
+`WindowsNativeProcessLauncher` is internal to Execution. M3.7b introduced it separately;
+M3.7c now connects it to ProcessRunner and the CLI with [group completion](windows-group-lifecycle.md).
+Domain, Application lifecycle, recovery and SQLite are unchanged. This page describes
+the low-level launch/resource-ownership component, not the full runner lifecycle.
 
 ## Launch contract
 
@@ -76,14 +77,14 @@ dotnet test --solution ResearchLab.slnx --no-build
 dotnet format ResearchLab.slnx --no-restore --verify-no-changes
 ```
 
-Verified on 2026-10-25, Windows x64 / .NET 10: build passed with zero warnings/errors;
+M3.7b checkpoint on 2026-10-25, Windows x64 / .NET 10: build passed with zero warnings/errors;
 8/8 native-launch tests and 267/267 solution tests passed without skips; format verification
 passed. The initial sandbox test attempt failed at the test runner's IPC pipe before any
 tests ran; the successful runs used execution outside that sandbox.
 
-M3.7c must establish group completion and integrate lifecycle/cleanup before production
-adoption. Root exit, Job close and EOF are separate evidence; this component does not
-change the current CLI's weaker crash/descendant guarantees.
+M3.7c implements [group completion and production integration](windows-group-lifecycle.md).
+Root exit, Job close and EOF remain separate evidence; direct low-level callers must not
+confuse this component's root wait with the runner's group-completion barrier.
 
 ## Official API references
 

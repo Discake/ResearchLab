@@ -427,6 +427,7 @@ public sealed partial class RunExecutionTests
 
     [Theory]
     [InlineData("streams", RunStatus.Succeeded, 524288)]
+    [InlineData("limit", RunStatus.Succeeded, 1048576)]
     [InlineData("overflow", RunStatus.Failed, 1048576)]
     [InlineData("fail", RunStatus.Failed, 19)]
     [InlineData("logged-wait", RunStatus.TimedOut, 40)]
@@ -447,7 +448,7 @@ public sealed partial class RunExecutionTests
         await using var stdout = await logs.OpenReadAsync(id, RunLogStream.Stdout, TestContext.Current.CancellationToken);
         await using var stderr = await logs.OpenReadAsync(id, RunLogStream.Stderr, TestContext.Current.CancellationToken);
         // Fixture newlines are platform dependent.
-        if (mode == "streams" || mode == "overflow")
+        if (mode is "streams" or "limit" or "overflow")
             Assert.Equal(expectedBytes, stdout.Length + stderr.Length);
         else
             Assert.True(stdout.Length + stderr.Length > 0);

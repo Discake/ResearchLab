@@ -46,7 +46,7 @@ protocol and artifact registration remain unimplemented; the log byte cap does n
 
 The local CLI scenario now covers initialization, import, Experiment creation, reviewed start,
 bounded logs, terminal history, managed Ctrl+C, explicit recovery and per-Run output allocation.
-Process ownership is unchanged. Host crashes and descendants surviving an exited root still
-have no guaranteed cleanup. Cleanup denial retains the foreground owner for retry. Before
-claiming stronger process safety, agree a separate OS ownership/containment contract and test
-it on supported platforms; Unix behavior remains unverified here. Live log UI belongs to M5.
+M3.7c now adds [Windows Job group ownership](windows-group-lifecycle.md), including
+descendants surviving root exit. Cleanup denial retains the foreground owner for retry.
+The complete CLI crash-window matrix remains M3.7d; Unix behavior retains its weaker,
+unverified guarantees. Live log UI belongs to M5.

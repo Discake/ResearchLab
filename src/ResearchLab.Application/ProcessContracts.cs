@@ -18,8 +18,9 @@ public interface IProcessExecution
 {
     // One foreground driver. A retry after ProcessCleanupException resumes cleanup, never launch.
     // Await onStarted before returning a result. Results/ordinary exceptions guarantee no
-    // live owned root and settled collection. Otherwise throw ProcessCleanupException,
-    // retaining all handles and pending I/O. Never swallow a failed acknowledgement.
+    // live execution within the backend's owned boundary and settled collection. Otherwise
+    // throw ProcessCleanupException, retaining ownership and pending I/O. Never swallow a
+    // failed acknowledgement. Execution defines platform-specific containment guarantees.
     Task<ProcessResult> ExecuteAsync(Func<ProcessStarted, Task> onStarted);
     // Thread-safe, idempotent control intent, not confirmation of termination.
     bool RequestCancellation();

@@ -142,9 +142,15 @@ Explicit CLI recovery delegates to M3.3; per-Run output allocation and RESEARCHL
 
 #### M3.7b — isolated Windows native launch (implemented)
 
-Internal CreateProcessW/STARTUPINFOEX launcher creates a process directly in its own kill-on-close Job, with explicit standard-handle inheritance and owned native resources. It is not connected to ProcessRunner or the CLI. Windows integration tests include exact Job membership and owner-death termination of root and descendant. Group completion and production integration remain M3.7c. [EN contract](docs/windows-native-launcher.md) / [RU](docs/windows-native-launcher.ru.md).
+Internal CreateProcessW/STARTUPINFOEX launcher creates a process directly in its own kill-on-close Job, with explicit standard-handle inheritance and owned native resources. Initially separate from ProcessRunner/CLI; integrated in M3.7c below. Windows tests include exact Job membership and owner-death termination of root and descendant. [EN contract](docs/windows-native-launcher.md) / [RU](docs/windows-native-launcher.ru.md).
 
-Внутренний Windows launcher создаёт процесс сразу в собственном Job с kill-on-close, явным наследованием стандартных handles и владением native-ресурсами. К ProcessRunner/CLI не подключён. Windows-тесты проверяют членство в конкретном Job и остановку корня/потомка после гибели владельца. Ожидание группы и интеграция остаются M3.7c.
+Внутренний Windows launcher создаёт процесс сразу в собственном Job с kill-on-close, явным наследованием стандартных handles и владением native-ресурсами. Первоначально отдельный; подключён к ProcessRunner/CLI в M3.7c ниже. Windows-тесты проверяют членство в конкретном Job и остановку корня/потомка после гибели владельца.
+
+#### M3.7c — Windows Job group lifecycle (implemented)
+
+ProcessRunner/CLI use native creation-time containment on Windows without fallback. Shared control/logging/cleanup drives a small OS resource adapter. Root exit/code are captured and the root handle released before Job accounting reaches zero; settled collection is also required. Cancel/timeout/critical output errors stop the whole Job; unknown cleanup retains the same owner for retry. Domain, Application lifecycle, recovery and schema are unchanged. [EN contract](docs/windows-group-lifecycle.md) / [RU](docs/windows-group-lifecycle.ru.md). M3.7d crash-window tests remain next.
+
+ProcessRunner/CLI используют native containment на Windows без fallback. Общие control/logging/cleanup управляют небольшим адаптером ресурсов. Exit/code корня сохраняются, root handle закрывается до ожидания нулевого Job accounting; требуется завершённый сбор. Cancel/timeout/критические ошибки вывода останавливают весь Job; неподтверждённая очистка сохраняет владельца для повтора. Domain, Application lifecycle, recovery и схема не изменены. Следующий этап — crash-window tests M3.7d.
 
 ### M4 — Protocol, metrics and artifacts
 

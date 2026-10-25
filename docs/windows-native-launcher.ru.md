@@ -1,8 +1,9 @@
 # M3.7b — отдельный Windows native launcher
 
-`WindowsNativeProcessLauncher` — внутренний компонент Execution, **не подключённый к
-ProcessRunner и CLI**. Domain, Application lifecycle, recovery и SQLite не меняются.
-Этот этап реализует запуск и владение ресурсами; ожидание всей группы относится к M3.7c.
+`WindowsNativeProcessLauncher` — внутренний компонент Execution. В M3.7b он появился
+отдельно; M3.7c подключает его к ProcessRunner/CLI с [ожиданием группы](windows-group-lifecycle.ru.md).
+Domain, Application lifecycle, recovery и SQLite не меняются. Эта страница описывает
+низкоуровневый запуск/владение ресурсами, а не полный lifecycle runner.
 
 ## Контракт запуска
 
@@ -78,14 +79,14 @@ dotnet test --solution ResearchLab.slnx --no-build
 dotnet format ResearchLab.slnx --no-restore --verify-no-changes
 ```
 
-Проверено 2026-10-25 на Windows x64 / .NET 10: сборка без предупреждений/ошибок;
+Контрольная точка M3.7b, 2026-10-25, Windows x64 / .NET 10: сборка без предупреждений/ошибок;
 8/8 native-launch тестов и 267/267 тестов solution прошли без пропусков; проверка
 форматирования прошла. Первая попытка в sandbox завершилась ошибкой IPC pipe тестового
 runner до запуска тестов; успешные прогоны выполнялись вне этого sandbox.
 
-M3.7c должен реализовать подтверждение завершения группы и интеграцию lifecycle/cleanup
-до подключения к production. Выход корня, закрытие Job и EOF — отдельные свидетельства;
-этот компонент не усиливает текущие гарантии CLI при crash или выживших потомках.
+M3.7c реализует [ожидание группы и рабочую интеграцию](windows-group-lifecycle.ru.md).
+Выход корня, закрытие Job и EOF остаются отдельными свидетельствами; прямой вызывающий
+не должен путать низкоуровневое ожидание корня с барьером завершения группы runner.
 
 Ссылки на официальные Microsoft Learn API, структуры, время жизни атрибутов и правила CRT
 собраны в [английской версии](windows-native-launcher.md#official-api-references).

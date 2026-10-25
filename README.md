@@ -108,7 +108,7 @@ Ctrl+C requests owned cancellation and waits for cleanup and terminal persistenc
 | `src/ResearchLab.Cli` | Read-only console adapter and composition root | Application, Infrastructure, Execution |
 | `tests/ResearchLab.Domain.Tests` | Domain invariants and architecture smoke test | Domain |
 | `tests/ResearchLab.IntegrationTests` | Persistence, import, trust, paths, Git, execution and console reads | Infrastructure, Execution, Cli |
-| `tests/ResearchLab.ProcessFixture` | Synthetic subprocess and crash owner for tests | Infrastructure |
+| `tests/ResearchLab.ProcessFixture` | Synthetic subprocess and crash owner for tests | Infrastructure, Execution |
 
 Domain and Application have no NuGet dependencies. Infrastructure uses EF Core
 SQLite 10.0.12, plus its design-time package for migrations. The smoke test loads the built
@@ -178,6 +178,6 @@ M3.6 adds `run recover` and `<data-dir>/<RunId:N>/output` via `RESEARCHLAB_OUTPU
 
 M3.6 добавляет `run recover` и каталог результатов каждого Run через `RESEARCHLAB_OUTPUT_DIR`, сохраняя CWD проекта. [Контракт и оставшиеся ограничения](docs/local-run-completion.ru.md).
 
-M3.7b adds an internal Windows native launcher with creation-time Job containment and real owner-death tests; ProcessRunner/CLI remain unchanged. Group completion is deferred to M3.7c. [Contract](docs/windows-native-launcher.md).
+M3.7b introduced [native Windows Job launch](docs/windows-native-launcher.md). M3.7c now uses it in ProcessRunner/CLI: root exit, saved exit code, zero active Job processes and settled collection are required before completion. Cancel/timeout stop the whole Job, including descendants of an exited root; unconfirmed cleanup retains ownership for retry. [Group contract and crash-test boundary](docs/windows-group-lifecycle.md).
 
-M3.7b добавляет внутренний Windows native launcher с созданием процесса сразу в Job и реальными тестами гибели владельца; ProcessRunner/CLI не изменены. Ожидание всей группы отложено до M3.7c. [Контракт](docs/windows-native-launcher.ru.md).
+M3.7b добавил [native Windows Job launch](docs/windows-native-launcher.ru.md). M3.7c подключает его к ProcessRunner/CLI: требуются выход корня, сохранённый exit code, ноль активных процессов Job и завершённый сбор. Cancel/timeout останавливают весь Job, включая потомков завершившегося корня; неподтверждённая очистка сохраняет владельца для повтора. [Групповой контракт и граница crash tests](docs/windows-group-lifecycle.ru.md).

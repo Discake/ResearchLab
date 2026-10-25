@@ -48,8 +48,9 @@ is attempted. Unconfirmed cleanup first raises ProcessCleanupException with the 
 owner; after cleanup retry, the original acknowledgement error is propagated.
 An I/O/access error in the final trust check fails Created without launching the process.
 
-The runner uses an explicit executable, literal ArgumentList, UseShellExecute=false and
-the validated workspace directory. Windows accepts `.exe` entry points only: `.cmd`/`.bat`
+The runner uses an explicit executable, literal arguments and the validated workspace.
+Windows uses [native Job launch and group completion](windows-group-lifecycle.md);
+non-Windows retains ArgumentList/UseShellExecute=false. Windows accepts `.exe` entry points only: `.cmd`/`.bat`
 can trigger command-processor fallback even with UseShellExecute=false. M2 import/review
 contracts are unchanged; unsupported entry points fail safely at execution. On Unix,
 OS execute permissions/interpreter resolution apply; Unix execution is not yet verified.
@@ -61,11 +62,11 @@ Validated scalar parameters are passed as UTF-8-compatible JSON text through
 `RESEARCHLAB_PARAMETERS_JSON`, without command interpolation. Inherited stdin is replaced
 with closed redirected input. stdout/stderr are drained concurrently using fixed buffers,
 saved separately as raw bytes. A fixed 1 MiB combined byte cap terminates excessive output as
-Failed. The configured timeout bounds root execution; confirmed root exit followed by
-successful collection produces TimedOut when the deadline wins arbitration. An already
-exited root keeps its natural outcome even if startup acknowledgement is slow. Cleanup
-attempts tree termination and separately bounds root-exit and drain waits to five seconds
-each. Unconfirmed stop or cleanup retains ownership in ProcessCleanupException, without a
+Failed. On Windows timeout bounds the entire Job group; root exit alone does not win late
+cancel/deadline while descendants remain. Root exit/code, zero Job accounting and successful
+collection are required. Cleanup uses TerminateJobObject, with a five-second confirmation
+bound and a separate five-second drain bound. Non-Windows retains root/best-effort tree semantics.
+Unconfirmed stop or cleanup retains ownership in ProcessCleanupException, without a
 terminal write, for explicit cleanup retry. Canceled reads mean failed collection, not EOF.
 
 CancellationToken applies only through initial insertion in StartRunAsync. Once Created is
@@ -79,8 +80,9 @@ Explicit recovery now follows [M3.3 local recovery](run-recovery.md).
 
 The inherited environment is not sandboxed. Filesystem TOCTOU races and
 the crash window between OS start and saved Running remain as described in the lifecycle
-design. Descendant cleanup after the root has already exited is not guaranteed; this
-minimal adapter does not add OS job objects or process isolation.
+design. Windows now contains ordinary CreateProcess descendants in a private Job even after
+root exit; the complete production crash-test matrix remains M3.7d. Non-Windows does not
+guarantee descendant cleanup after root exit. Job containment is not a filesystem/security sandbox.
 
 Tests use a dedicated synthetic executable fixture under tests, not a product CLI or
 experimental evidence. They cover real SQLite ordering/outcomes, startup failure, missing

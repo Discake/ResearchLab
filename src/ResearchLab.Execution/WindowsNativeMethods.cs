@@ -32,6 +32,13 @@ internal static class WindowsNativeMethods
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    internal struct BasicAccounting
+    {
+        internal long UserTime, KernelTime, PeriodUserTime, PeriodKernelTime;
+        internal uint PageFaults, TotalProcesses, ActiveProcesses, TerminatedProcesses;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     internal struct ExtendedLimits
     {
         internal BasicLimits Basic;
@@ -88,6 +95,13 @@ internal static class WindowsNativeMethods
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool GetExitCodeProcess(KernelHandle process, out uint code);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool QueryInformationJobObject(KernelHandle job, int informationClass,
+        out BasicAccounting information, uint size, nint returned);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool TerminateJobObject(KernelHandle job, uint exitCode);
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool IsProcessInJob(KernelHandle process, KernelHandle job, [MarshalAs(UnmanagedType.Bool)] out bool result);

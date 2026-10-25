@@ -9,7 +9,7 @@ using static ResearchLab.Execution.WindowsNativeMethods;
 
 namespace ResearchLab.Execution;
 
-// Deliberately separate from ProcessRunner until group completion is implemented (M3.7c).
+// Creation-time containment; ProcessRunner owns group completion and collection.
 internal sealed class WindowsNativeProcessLauncher(Action<KernelHandle>? inspectPreparedJob = null)
 {
     // Inputs come from trusted run preparation. This layer never searches PATH or invokes a shell.

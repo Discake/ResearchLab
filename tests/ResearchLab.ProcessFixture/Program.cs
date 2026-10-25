@@ -4,10 +4,12 @@ using System.Text.Json;
 // Synthetic subprocess fixture for integration tests, not a ResearchLab CLI or sample evidence.
 switch (args.FirstOrDefault())
 {
-    case "native-echo" or "native-owner" or "native-tree" or "native-hold" or "native-marker" or "native-resources":
+    case "native-echo" or "native-owner" or "native-tree" or "native-hold" or "native-marker" or "native-resources" or "group-root" or "group-child":
         return await NativeLauncherFixture.RunAsync(args);
     case "native-exit-259":
         return 259;
+    case "closed-job-owner":
+        return await ClosedJobFixture.RunAsync(args);
     case "interrupt-cli" when OperatingSystem.IsWindows():
         return await WindowsConsoleInterrupt.RunAsync(args);
     case "owner-session":
@@ -28,6 +30,9 @@ switch (args.FirstOrDefault())
             return json.RootElement.GetProperty("n").GetInt32() == 2 ? 0 : 9;
     case "streams":
         await Task.WhenAll(WriteAsync(Console.Out, 256 * 1024), WriteAsync(Console.Error, 256 * 1024));
+        return 0;
+    case "limit":
+        await Task.WhenAll(WriteAsync(Console.Out, 512 * 1024), WriteAsync(Console.Error, 512 * 1024));
         return 0;
     case "overflow":
         await Task.WhenAll(WriteAsync(Console.Out, 2 * 1024 * 1024), WriteAsync(Console.Error, 2 * 1024 * 1024));

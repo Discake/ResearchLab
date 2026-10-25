@@ -36,6 +36,41 @@ internal static class NativeLauncherFixture
                 return 0;
             case "native-resources":
                 return await CheckResourcesAsync(args[1]);
+            case "group-root":
+                using (var child = Process.Start(new ProcessStartInfo(Environment.ProcessPath!)
+                {
+                    UseShellExecute = false,
+                    ArgumentList = { "group-child", args[1] }
+                })!)
+                {
+                    await WaitForFileAsync("group-child-ready");
+                    await File.WriteAllTextAsync("group-child.pid", child.Id.ToString(CultureInfo.InvariantCulture));
+                    await WaitForFileAsync("group-root-exit");
+                }
+                return 0;
+            case "group-child":
+                Console.WriteLine("synthetic child stdout");
+                Console.Error.WriteLine("synthetic child stderr");
+                if (args[1] == "closed")
+                {
+                    Console.Out.Flush();
+                    Console.Error.Flush();
+                    CloseHandle(GetStdHandle(-11));
+                    CloseHandle(GetStdHandle(-12));
+                }
+                await File.WriteAllTextAsync("group-child-ready", "ready");
+                await WaitForFileAsync("group-release");
+                if (args[1] == "overflow")
+                {
+                    await Console.Out.WriteAsync(new string('x', 2 * 1024 * 1024));
+                    await Task.Delay(Timeout.InfiniteTimeSpan);
+                }
+                if (args[1] != "closed")
+                {
+                    Console.WriteLine("synthetic child finished");
+                    Console.Error.WriteLine("synthetic child finished stderr");
+                }
+                return 0;
             case "native-hold":
                 await File.WriteAllTextAsync(args[1], Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
                 await Task.Delay(Timeout.InfiniteTimeSpan);
@@ -85,6 +120,18 @@ internal static class NativeLauncherFixture
             default: throw new InvalidOperationException();
         }
     }
+
+    private static async Task WaitForFileAsync(string path)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        while (!File.Exists(path)) await Task.Delay(10, timeout.Token);
+    }
+
+    [DllImport("kernel32.dll")]
+    private static extern nint GetStdHandle(int kind);
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseHandle(nint handle);
 
     private static async Task<int> CheckResourcesAsync(string invalidExecutable)
     {

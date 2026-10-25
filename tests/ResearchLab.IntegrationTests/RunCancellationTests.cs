@@ -52,7 +52,7 @@ public sealed partial class RunExecutionTests
     }
 
     [Fact]
-    public async Task NaturalExitWinsLateCancellationEvenBeforeStartAcknowledgementReturns()
+    public async Task LateCancellationAfterRootExitUsesExecutionBoundaryBeforeAcknowledgementReturns()
     {
         using var fixture = new TestWorkspace();
         var (catalog, experiment) = await SeedAsync(fixture, "success");
@@ -63,15 +63,19 @@ public sealed partial class RunExecutionTests
         var driver = operation.ExecuteAsync();
         var started = await runner.Started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         using var process = Process.GetProcessById(started.ProcessId);
+        bool accepted;
         try
         {
             await process.WaitForExitAsync(TestContext.Current.CancellationToken);
-            Assert.False(operation.RequestCancellation());
+            // Windows may still have associated processes (including OS console teardown).
+            // Root exit is no longer an independent oracle for group completion.
+            accepted = operation.RequestCancellation();
+            if (!OperatingSystem.IsWindows()) Assert.False(accepted);
         }
         finally { runner.Acknowledge.TrySetResult(); }
         await driver;
-        await AssertSingleTerminalAsync(fixture, operation, RunStatus.Succeeded);
-        Assert.False(operation.RequestCancellation());
+        await AssertSingleTerminalAsync(fixture, operation, accepted ? RunStatus.Canceled : RunStatus.Succeeded);
+        Assert.Equal(accepted, operation.RequestCancellation());
     }
 
     [Theory]
@@ -194,7 +198,6 @@ public sealed partial class RunExecutionTests
             var storage = await Assert.ThrowsAsync<DbUpdateException>(() => operation.ExecuteAsync());
             Assert.Contains("Synthetic startup write failure", storage.InnerException!.Message);
             Assert.Equal(2, terminator.Calls);
-            Assert.True(terminator.LastProcessExited);
             saved = (await fixture.Store.GetRunAsync(operation.RunId, TestContext.Current.CancellationToken))!;
             Assert.Equal(RunStatus.Created, saved.Status);
             Assert.Null(saved.FinishedAtUtc);
@@ -279,17 +282,14 @@ public sealed partial class RunExecutionTests
     private sealed class DeniedFirstStop(bool ignoreFirstStop = false) : IProcessTerminator
     {
         public int Calls { get; private set; }
-        public bool LastProcessExited { get; private set; }
-        public void KillTree(Process process)
+        public void Stop(Action stopGroup)
         {
             if (++Calls == 1)
             {
                 if (ignoreFirstStop) return;
                 throw new Win32Exception(5);
             }
-            process.Kill(entireProcessTree: true);
-            process.WaitForExit(5000);
-            LastProcessExited = process.HasExited;
+            stopGroup(); // Confirmation belongs to the runner, including Job drain on Windows.
         }
     }
 

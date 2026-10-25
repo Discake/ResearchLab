@@ -25,6 +25,21 @@ public sealed class WindowsNativeLauncherTests
     private static string Executable => Path.Combine(AppContext.BaseDirectory, "ProcessFixture", "ResearchLab.ProcessFixture.exe");
 
     [WindowsFact]
+    public async Task AccountingConfirmsZeroAfterReleasingOwnedRootReference()
+    {
+        using var fixture = new TestWorkspace();
+        using var process = Launch(fixture, ["success"]);
+        Assert.Equal(0, await Exit(process));
+        var jobs = new WindowsJobControl();
+        var beforeRelease = jobs.ActiveProcesses(process.Job);
+        process.Process.Dispose();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (jobs.ActiveProcesses(process.Job) != 0) await Task.Delay(10, timeout.Token);
+        Assert.True(process.Process.IsClosed);
+        TestContext.Current.TestOutputHelper?.WriteLine($"Synthetic accounting probe: ActiveProcesses with held root handle={beforeRelease}; after release=0.");
+    }
+
+    [WindowsFact]
     public async Task NativeFixtureSucceedsAndReportsNonzeroAndStillActiveExitCodes()
     {
         using var fixture = new TestWorkspace();
