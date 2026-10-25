@@ -140,6 +140,12 @@ Acceptance:
 
 Explicit CLI recovery delegates to M3.3; per-Run output allocation and RESEARCHLAB_OUTPUT_DIR preserve workspace CWD. No process ownership changes or M4 registration. [EN contract and remaining M3 boundaries](docs/local-run-completion.md) / [RU](docs/local-run-completion.ru.md).
 
+#### M3.7b — isolated Windows native launch (implemented)
+
+Internal CreateProcessW/STARTUPINFOEX launcher creates a process directly in its own kill-on-close Job, with explicit standard-handle inheritance and owned native resources. It is not connected to ProcessRunner or the CLI. Windows integration tests include exact Job membership and owner-death termination of root and descendant. Group completion and production integration remain M3.7c. [EN contract](docs/windows-native-launcher.md) / [RU](docs/windows-native-launcher.ru.md).
+
+Внутренний Windows launcher создаёт процесс сразу в собственном Job с kill-on-close, явным наследованием стандартных handles и владением native-ресурсами. К ProcessRunner/CLI не подключён. Windows-тесты проверяют членство в конкретном Job и остановку корня/потомка после гибели владельца. Ожидание группы и интеграция остаются M3.7c.
+
 ### M4 — Protocol, metrics and artifacts
 
 **Outcome:** experimental evidence is recorded with source provenance.

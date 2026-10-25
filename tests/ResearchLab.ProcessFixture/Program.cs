@@ -4,6 +4,10 @@ using System.Text.Json;
 // Synthetic subprocess fixture for integration tests, not a ResearchLab CLI or sample evidence.
 switch (args.FirstOrDefault())
 {
+    case "native-echo" or "native-owner" or "native-tree" or "native-hold" or "native-marker" or "native-resources":
+        return await NativeLauncherFixture.RunAsync(args);
+    case "native-exit-259":
+        return 259;
     case "interrupt-cli" when OperatingSystem.IsWindows():
         return await WindowsConsoleInterrupt.RunAsync(args);
     case "owner-session":

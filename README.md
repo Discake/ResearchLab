@@ -177,3 +177,7 @@ Smoke-тест допускает только System.Runtime, System.Collection
 M3.6 adds `run recover` and `<data-dir>/<RunId:N>/output` via `RESEARCHLAB_OUTPUT_DIR`, preserving workspace CWD. [Contract and remaining limits](docs/local-run-completion.md).
 
 M3.6 добавляет `run recover` и каталог результатов каждого Run через `RESEARCHLAB_OUTPUT_DIR`, сохраняя CWD проекта. [Контракт и оставшиеся ограничения](docs/local-run-completion.ru.md).
+
+M3.7b adds an internal Windows native launcher with creation-time Job containment and real owner-death tests; ProcessRunner/CLI remain unchanged. Group completion is deferred to M3.7c. [Contract](docs/windows-native-launcher.md).
+
+M3.7b добавляет внутренний Windows native launcher с созданием процесса сразу в Job и реальными тестами гибели владельца; ProcessRunner/CLI не изменены. Ожидание всей группы отложено до M3.7c. [Контракт](docs/windows-native-launcher.ru.md).
