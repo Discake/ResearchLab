@@ -24,6 +24,9 @@ internal sealed class WindowsNativeProcessLauncher(Action<KernelHandle>? inspect
         if (!string.Equals(Path.GetExtension(executable), ".exe", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("A native .exe is required.", nameof(executable));
         using var environment = new NativeText(BuildEnvironment(parametersJson, outputDirectory));
+#if RESEARCHLAB_CRASH_TESTS
+        ResearchLab.Application.CrashTestCheckpoint.Reach("before-job");
+#endif
         var job = CreateJobObjectW(0, null); // NULL security attributes: never inheritable.
         WindowsNativeProcess? owner = null;
         OutputPipe? stdout = null;
@@ -33,6 +36,9 @@ internal sealed class WindowsNativeProcessLauncher(Action<KernelHandle>? inspect
             Check(!job.IsInvalid);
             ConfigureJob(job);
             inspectPreparedJob?.Invoke(job); // Narrow pre-start fault/inspection seam, never a containment fallback.
+#if RESEARCHLAB_CRASH_TESTS
+            ResearchLab.Application.CrashTestCheckpoint.Reach("job-configured");
+#endif
             var command = BuildCommandLine(executable, arguments);
             stdout = new OutputPipe();
             stderr = new OutputPipe();
@@ -58,6 +64,9 @@ internal sealed class WindowsNativeProcessLauncher(Action<KernelHandle>? inspect
                 environment.DangerousGetHandle(), workingDirectory, ref startup, out var info));
             // No fallible setup, membership query, callback, or managed allocation after success.
             owner.Adopt(info);
+#if RESEARCHLAB_CRASH_TESTS
+            ResearchLab.Application.CrashTestCheckpoint.Reach("native-created", owner.ProcessId);
+#endif
             return owner;
         }
         catch

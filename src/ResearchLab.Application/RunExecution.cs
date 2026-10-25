@@ -76,9 +76,15 @@ public sealed class RunExecution(IResearchStore store, ProjectCatalog catalog, I
                     {
                         try
                         {
+#if RESEARCHLAB_CRASH_TESTS
+                            CrashTestCheckpoint.Reach("before-running", started.ProcessId);
+#endif
                             run.Start(started.StartedAtUtc, started.ProcessId, run.Version);
                             await store.SaveRunAsync(run, persistedVersion);
                             persistedVersion = run.Version;
+#if RESEARCHLAB_CRASH_TESTS
+                            CrashTestCheckpoint.Reach("after-running", started.ProcessId);
+#endif
                         }
                         catch (Exception exception)
                         {
@@ -118,7 +124,13 @@ public sealed class RunExecution(IResearchStore store, ProjectCatalog catalog, I
                 else
                     // This increment requires successful stream draining, but has no metric/artifact protocol.
                     run.Succeed(finishedAt, 0, resultsValidated: true, run.Version);
+#if RESEARCHLAB_CRASH_TESTS
+                CrashTestCheckpoint.Reach("before-terminal", run.ProcessId);
+#endif
                 await store.SaveRunAsync(run, persistedVersion);
+#if RESEARCHLAB_CRASH_TESTS
+                CrashTestCheckpoint.Reach("after-terminal", run.ProcessId);
+#endif
                 return run.Id;
             }
         }

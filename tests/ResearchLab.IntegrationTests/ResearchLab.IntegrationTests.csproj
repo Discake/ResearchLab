@@ -25,4 +25,12 @@
     <Copy SourceFiles="@(ForegroundDemoFiles)" DestinationFolder="$(OutDir)ForegroundDemo" />
     <Copy SourceFiles="$(MSBuildThisFileDirectory)../../samples/foreground-demo/experiment.json" DestinationFolder="$(OutDir)ForegroundDemo" />
   </Target>
+  <Target Name="CopyCrashTestCli" AfterTargets="Build" Condition="'$(Configuration)' != 'CrashTests'">
+    <MSBuild Projects="../../src/ResearchLab.Cli/ResearchLab.Cli.csproj" Targets="Build" Properties="Configuration=CrashTests;BuildProjectReferences=true"
+             RemoveProperties="CurrentSolutionConfigurationContents;BuildingSolutionFile" />
+    <ItemGroup>
+      <CrashCliFiles Include="$(MSBuildThisFileDirectory)../../src/ResearchLab.Cli/bin/CrashTests/$(TargetFramework)/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(CrashCliFiles)" DestinationFiles="@(CrashCliFiles->'$(OutDir)CrashTestCli/%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
 </Project>

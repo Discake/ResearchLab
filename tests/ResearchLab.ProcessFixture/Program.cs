@@ -4,6 +4,12 @@ using System.Text.Json;
 // Synthetic subprocess fixture for integration tests, not a ResearchLab CLI or sample evidence.
 switch (args.FirstOrDefault())
 {
+    case "crash-root" when OperatingSystem.IsWindows():
+        return CrashFixture.Root(args);
+    case "crash-child" when OperatingSystem.IsWindows():
+        return CrashFixture.Child(args);
+    case "crash-cli-parent" when OperatingSystem.IsWindows():
+        return await CrashFixture.CliParentAsync(args);
     case "native-echo" or "native-owner" or "native-tree" or "native-hold" or "native-marker" or "native-resources" or "group-root" or "group-child":
         return await NativeLauncherFixture.RunAsync(args);
     case "native-exit-259":

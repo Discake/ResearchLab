@@ -152,6 +152,12 @@ ProcessRunner/CLI use native creation-time containment on Windows without fallba
 
 ProcessRunner/CLI используют native containment на Windows без fallback. Общие control/logging/cleanup управляют небольшим адаптером ресурсов. Exit/code корня сохраняются, root handle закрывается до ожидания нулевого Job accounting; требуется завершённый сбор. Cancel/timeout/критические ошибки вывода останавливают весь Job; неподтверждённая очистка сохраняет владельца для повтора. Domain, Application lifecycle, recovery и схема не изменены. Следующий этап — crash-window tests M3.7d.
 
+#### M3.7d — Windows crash and persistence verification (verified)
+
+Real out-of-process CLI crash tests terminate only the owner through TerminateProcess and observe fixture process handles without retaining its Run Job. Five compile-time test-only startup checkpoints plus terminal-save boundaries distinguish unsaved results from durable success. Shared-DB concurrent owners remain isolated; corrupt ownership evidence stays unverified; recovery never signals recorded PIDs. The 21-case matrix and all 302 solution tests passed on the documented Windows x64 build. No production execution defect, Domain/schema change or architecture rewrite was required. [EN evidence/limits](docs/windows-crash-safety.md) / [RU](docs/windows-crash-safety.ru.md).
+
+Реальные отдельные CLI crash tests завершают только владельца через TerminateProcess и наблюдают process handles fixture, не удерживая его Run Job. Пять compile-time test-only startup checkpoints и границы terminal save отделяют несохранённый результат от durable success. Конкурентные владельцы в общей БД изолированы; повреждённое ownership evidence остаётся unverified; recovery не сигналит сохранённые PID. Матрица 21 случая и все 302 теста solution прошли на указанном Windows x64 build. Дефект рабочего исполнения, изменение Domain/схемы или смена архитектуры не потребовались.
+
 ### M4 — Protocol, metrics and artifacts
 
 **Outcome:** experimental evidence is recorded with source provenance.

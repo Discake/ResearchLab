@@ -121,7 +121,9 @@ implementation: 8/8 tests passed. Intermediate focused runs exposed fixture cloc
 setup errors and an obsolete root-only late-cancel assertion; these were corrected before
 the final full run. Other Windows architectures/versions and Unix were not run here.
 
-The production path is ready for M3.7d crash tests. The M3.7b separate-owner kill-on-close gate
+M3.7d now verifies the [real CLI crash/persistence matrix](windows-crash-safety.md).
+The following was the remaining test boundary at the M3.7c checkpoint:
+the production path was ready for M3.7d crash tests. The M3.7b separate-owner kill-on-close gate
 remains, but this increment does not claim a complete CLI crash/recovery matrix. M3.7d should
 kill the real owner around native creation/Running persistence/root exit/terminal persistence,
 verify descendant termination and explicit Interrupted recovery without killing stored PIDs,
