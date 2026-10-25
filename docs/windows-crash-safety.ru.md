@@ -137,3 +137,8 @@ runner не поддержал запрошенный `--report-trx`: в той 
 [TerminateProcess и асинхронный выход](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess),
 [nested Job inheritance/limits](https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs),
 [создание/наследование console](https://learn.microsoft.com/en-us/windows/console/creation-of-a-console).
+
+
+M3.7e сводит итоговые проверки, область ОС, crash-гарантии и оставшиеся ограничения:
+[окончательная проверка (2026-10-25)](m3-final-verification.ru.md). Прежние числа на этой
+странице относятся к соответствующему этапу, а не к последнему полному набору тестов.

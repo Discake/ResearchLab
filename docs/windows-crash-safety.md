@@ -135,3 +135,8 @@ Official references: [kill-on-last-close](https://learn.microsoft.com/en-us/wind
 [TerminateProcess and asynchronous exit](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess),
 [nested Job inheritance/limits](https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs),
 [console creation/attachment](https://learn.microsoft.com/en-us/windows/console/creation-of-a-console).
+
+
+M3.7e consolidates the final checks, OS scope, crash guarantees and remaining limits:
+[final verification (2026-10-25)](m3-final-verification.md). Earlier counts on this page
+are historical milestone results, not the latest suite total.

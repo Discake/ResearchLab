@@ -111,3 +111,8 @@ launch-time trust revalidation and one terminal version. A manually triggered Ti
 makes deadline races deterministic; it does not fabricate process-exit evidence. Real-time
 timeout/tree cleanup, output limits, persistence failures and stream collection also remain
 covered by the execution tests. Windows is verified; Unix behavior is not verified here.
+
+
+M3.7e consolidates the final checks, OS scope, crash guarantees and remaining limits:
+[final verification (2026-10-25)](m3-final-verification.md). Earlier counts on this page
+are historical milestone results, not the latest suite total.

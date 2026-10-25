@@ -135,3 +135,8 @@ References: [accounting layout/reference lifetime](https://learn.microsoft.com/e
 [TerminateJobObject](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-terminatejobobject),
 [asynchronous termination and object lifetime](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess),
 [Job inheritance, signaling and kill-on-close](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects).
+
+
+M3.7e consolidates the final checks, OS scope, crash guarantees and remaining limits:
+[final verification (2026-10-25)](m3-final-verification.md). Earlier counts on this page
+are historical milestone results, not the latest suite total.

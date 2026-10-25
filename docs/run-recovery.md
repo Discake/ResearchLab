@@ -78,6 +78,12 @@ remain unchanged. This amendment is reflected in DOMAIN.md and DOMAIN.ru.md.
 
 ## Guarantees without a daemon
 
+With the M3.7 Windows backend, OS kill-on-close containment provides a separate process
+lifetime guarantee, verified by the [CLI crash matrix](windows-crash-safety.md).
+Recovery still cannot reconstruct that observation from session files: Interrupted never
+means a recovered computation. The orphan warning below remains applicable to non-Windows
+and execution outside the verified containment boundary.
+
 Recovery is eventually consistent **when explicitly invoked**; nothing wakes up on its own.
 It records verified loss of an execution owner, not successful cleanup of that owner's
 children. An orphan subprocess can survive a host crash. M3.3 deliberately never signals a
@@ -112,3 +118,8 @@ launch. Tests also exercise idempotent migrations and nullable legacy ownership.
 verified; Unix execution/locking has not been verified in this environment.
 
 M3.6 exposes this use case as `run recover`; see [CLI output and limits](local-run-completion.md).
+
+
+M3.7e consolidates the final checks, OS scope, crash guarantees and remaining limits:
+[final verification (2026-10-25)](m3-final-verification.md). Earlier counts on this page
+are historical milestone results, not the latest suite total.

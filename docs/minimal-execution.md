@@ -81,7 +81,7 @@ Explicit recovery now follows [M3.3 local recovery](run-recovery.md).
 The inherited environment is not sandboxed. Filesystem TOCTOU races and
 the crash window between OS start and saved Running remain as described in the lifecycle
 design. Windows now contains ordinary CreateProcess descendants in a private Job even after
-root exit; the complete production crash-test matrix remains M3.7d. Non-Windows does not
+root exit; the production CLI crash matrix is verified in [M3.7d](windows-crash-safety.md). Non-Windows does not
 guarantee descendant cleanup after root exit. Job containment is not a filesystem/security sandbox.
 
 Tests use a dedicated synthetic executable fixture under tests, not a product CLI or
@@ -116,3 +116,8 @@ its ancestors. Concurrent replacement between validation and open remains a TOCT
 of trusted local storage, not protection against a hostile process with write access to the
 root/ancestors. The host must restrict those permissions. M3.6 passes RESEARCHLAB_OUTPUT_DIR
 for [per-Run output](local-run-completion.md); this is not M4 Artifact Storage.
+
+
+M3.7e consolidates the final checks, OS scope, crash guarantees and remaining limits:
+[final verification (2026-10-25)](m3-final-verification.md). Earlier counts on this page
+are historical milestone results, not the latest suite total.

@@ -133,3 +133,8 @@ owner во время retained cleanup. Recovery по-прежнему фикс�
 [TerminateJobObject](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-terminatejobobject),
 [асинхронная остановка и lifetime объекта](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess),
 [наследование, signaling и kill-on-close](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects).
+
+
+M3.7e сводит итоговые проверки, область ОС, crash-гарантии и оставшиеся ограничения:
+[окончательная проверка (2026-10-25)](m3-final-verification.ru.md). Прежние числа на этой
+странице относятся к соответствующему этапу, а не к последнему полному набору тестов.

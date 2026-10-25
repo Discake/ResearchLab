@@ -2,8 +2,8 @@
 
 Local-first research platform connecting source code, experiment runs, recorded
 evidence and publishable Research Stories. This repository currently implements
-**M0–M2: bootstrap, domain core, SQLite persistence and local project import**.
-M3 also includes preparation, trusted foreground execution, managed cancellation and local recovery. The application API
+**M0–M3: bootstrap, domain core, SQLite/import and trusted local execution**.
+M3 includes preparation, trusted foreground execution, managed cancellation, local recovery and verified Windows Job containment. The application API
 is usable from .NET code and the foreground CLI. A UI is not implemented yet.
 
 ## Prerequisites and verification
@@ -154,7 +154,7 @@ Active and unknown owners are skipped; no process is killed. M4 artifact storage
 
 ## Кратко по-русски
 
-Реализованы M0–M2: доменное ядро, SQLite/EF Core, импорт, каталог экспериментов
+Реализованы M0–M3: доменное ядро, SQLite/EF Core, импорт, каталог экспериментов
 и явное подтверждение доверия. M3 дополнен подготовкой и минимальным доверенным исполнением
 с сохранением состояний Run и раздельных ограниченных логов stdout/stderr.
 Доступ к логам, деталям Run и страницам истории предоставляется через Application.
@@ -172,7 +172,7 @@ API доступен из .NET и foreground CLI; UI пока нет.
 Smoke-тест допускает только System.Runtime, System.Collections и System.Linq.
 Использовано согласованное исправление EN/RU: ошибка запуска переводит Run
 из Created сразу в Failed. Интеграционные тесты используют реальные временные БД
-и Git-репозитории; проверены на Windows. Импорт не запускает задачи. Следующий этап — M3.
+и Git-репозитории; проверены на Windows. Импорт не запускает задачи. Следующий этап — M4.
 
 M3.6 adds `run recover` and `<data-dir>/<RunId:N>/output` via `RESEARCHLAB_OUTPUT_DIR`, preserving workspace CWD. [Contract and remaining limits](docs/local-run-completion.md).
 
@@ -185,3 +185,14 @@ M3.7b добавил [native Windows Job launch](docs/windows-native-launcher.ru
 M3.7d verifies CLI-only forced termination, startup/terminal persistence windows, independent concurrent Jobs, explicit recovery and compatible nested/console contexts with real Windows process handles. 21 crash cases and all 302 solution tests passed on the documented Windows build. Checkpoints exist only in a separate CrashTests build. [Observed matrix and limitations](docs/windows-crash-safety.md).
 
 M3.7d проверяет принудительное завершение только CLI, startup/terminal окна сохранения, независимые конкурентные Job, явный recovery и допустимые nested/console-контексты настоящими Windows process handles. 21 crash case и все 302 теста solution прошли на указанном в отчёте Windows build. Checkpoints есть только в отдельной сборке CrashTests. [Наблюдаемая матрица и ограничения](docs/windows-crash-safety.ru.md).
+
+M3.7e final verification (2026-10-25): restore, build, all 302 tests (zero skips), format
+and EF pending-model check passed. Verified platform: Windows 11 25H2 x64 build 26200.9711;
+other Windows versions and Unix are unverified. M4 can begin within this scope.
+See [demo, regression results and guarantee limits](docs/m3-final-verification.md), including
+the manual Ctrl+C verification gap and PowerShell 5.1 JSON limitations.
+
+M3.7e (2026-10-25): restore, build, все 302 теста без пропусков, format и EF model check
+прошли. Проверена Windows 11 25H2 x64 build 26200.9711; другие Windows и Unix не проверены.
+Можно начинать M4 в этих границах. [Demo, регрессии и ограничения](docs/m3-final-verification.ru.md),
+включая отсутствие ручного Ctrl+C и ограничения JSON в PowerShell 5.1.

@@ -9,6 +9,22 @@ C# host code or hand-edited SQLite records are needed. Windows/PowerShell 7 is v
 
 From the repository root:
 
+Use PowerShell 7.3+ with `$PSNativeCommandArgumentPassing = 'Standard'` for the JSON
+arguments below. Before piping native output to `ConvertFrom-Json`, set
+`[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)` and
+`$OutputEncoding = [Console]::OutputEncoding`. The task must also emit UTF-8 for log
+reading; changing the shell encoding cannot repair a child's non-UTF-8 output.
+
+`prepare-demo.ps1` writes configuration with explicit UTF-8 without BOM, including on
+Windows PowerShell 5.1; avoid its default `Out-File`/`Set-Content` encodings for JSON.
+Do not copy the direct JSON argument examples unchanged into 5.1: its legacy native
+argument handling differs. A compact JSON value without spaces was verified using
+`$json = '{"iterations":4,"scale":2,"label":"shell-check","verbose":true}'`, then
+`--parameters $json.Replace('"', '\"')`. Values containing spaces failed in the attempted
+5.1 variants; use PowerShell 7 Standard mode for those examples. Non-ASCII `.ps1` source
+itself needs a BOM for 5.1, unlike the BOM-free JSON files. See
+[actual shell/demo verification](m3-final-verification.md).
+
 ```powershell
 dotnet restore ResearchLab.slnx
 dotnet build ResearchLab.slnx --no-restore

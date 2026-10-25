@@ -9,6 +9,22 @@ C# host-код или вручную менять SQLite не требуется
 
 Из корня репозитория:
 
+Для JSON-аргументов ниже используйте PowerShell 7.3+ с
+`$PSNativeCommandArgumentPassing = 'Standard'`. Перед передачей native stdout в
+`ConvertFrom-Json` задайте `[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)`
+и `$OutputEncoding = [Console]::OutputEncoding`. Дочерняя задача тоже должна выдавать UTF-8
+для чтения логов; настройка shell не исправляет уже выданные байты другой кодировки.
+
+`prepare-demo.ps1` явно записывает конфигурацию в UTF-8 без BOM и в Windows PowerShell 5.1;
+не используйте стандартные кодировки его `Out-File`/`Set-Content` для JSON. Прямые примеры
+JSON-аргументов нельзя без изменения переносить в 5.1: legacy native argument handling
+отличается. Проверен компактный JSON без пробелов:
+`$json = '{"iterations":4,"scale":2,"label":"shell-check","verbose":true}'`, затем
+`--parameters $json.Replace('"', '\"')`. Значения с пробелами не прошли в опробованных
+вариантах 5.1; для них используйте PowerShell 7 Standard. Сам `.ps1` с не-ASCII текстом
+требует BOM для 5.1, в отличие от JSON без BOM. См.
+[фактическую проверку shell/demo](m3-final-verification.ru.md).
+
 ```powershell
 dotnet restore ResearchLab.slnx
 dotnet build ResearchLab.slnx --no-restore

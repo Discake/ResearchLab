@@ -48,5 +48,10 @@ The local CLI scenario now covers initialization, import, Experiment creation, r
 bounded logs, terminal history, managed Ctrl+C, explicit recovery and per-Run output allocation.
 M3.7c now adds [Windows Job group ownership](windows-group-lifecycle.md), including
 descendants surviving root exit. Cleanup denial retains the foreground owner for retry.
-The complete CLI crash-window matrix remains M3.7d; Unix behavior retains its weaker,
+The CLI crash-window matrix is verified in [M3.7d](windows-crash-safety.md); Unix behavior retains its weaker,
 unverified guarantees. Live log UI belongs to M5.
+
+
+M3.7e consolidates the final checks, OS scope, crash guarantees and remaining limits:
+[final verification (2026-10-25)](m3-final-verification.md). Earlier counts on this page
+are historical milestone results, not the latest suite total.
