@@ -1,5 +1,7 @@
 # Foreground experiment execution through the CLI
 
+For a short end-to-end CLI check, including recovery, start with the [CLI quickstart](cli-quickstart.md).
+
 The existing `researchlab` executable now composes ProjectCatalog, RunExecution/ProcessRunner,
 RunHistory and RunLogs. There is no additional host, daemon, queue or detached driver. This
 guide is reproducible from a fresh checkout using the supplied real console example; no
