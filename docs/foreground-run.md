@@ -84,6 +84,21 @@ On Unix use the executable name without `.exe` and appropriate execute permissio
 execution has not been verified in this environment. The preparation script selects the
 platform's built example entry point automatically.
 
+## Explicit recovery after an owner crash
+
+CLI does **not** automatically reconcile unfinished Runs. Use the same database and data root as for the run:
+
+```powershell
+$recovery = & dotnet $demo.cli @common run recover | ConvertFrom-Json
+$recovery | ConvertTo-Json -Depth 6
+# Repeating recovery is safe:
+& dotnet $demo.cli @common run recover
+```
+
+`recovered` lists Runs safely transitioned to `Interrupted` after verified owner loss; `conflicts` lists concurrent updates needing attention; `unverifiedSessions` lists active or unverifiable sessions left unchanged. **All three lists are normally empty after ordinary terminal runs.** CLI exit code 0 means the check completed, not that the lists are empty. Recovery neither restarts work nor kills stored PIDs; `Interrupted` is not a recovered computation result.
+
+For a real crash test use the isolated [Windows crash suite](windows-crash-safety.md), rather than killing arbitrary `dotnet.exe` processes. Full commands and expected statuses: [quickstart](cli-quickstart.md).
+
 ## Parameters and metadata preparation
 
 `--parameters` is one JSON object, quoted as a single shell argument. Values are converted
