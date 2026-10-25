@@ -115,6 +115,8 @@ public sealed partial class SqliteResearchStore : IResearchStore, IRunSessionSto
 
     public async Task SaveRunAsync(Run run, long expectedVersion, CancellationToken cancellationToken = default)
     {
+        if (run.IsMetricWindow)
+            throw new InvalidOperationException("Save metric windows through their dedicated unit of work.");
         await using var db = new ResearchDbContext(options);
         var stored = await LoadRun(db, run.Id, cancellationToken) ?? throw new CatalogException("RunNotFound", "Run was not found.");
         if (stored.Version != expectedVersion)

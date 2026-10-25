@@ -70,6 +70,7 @@ public sealed class ResearchDbContext(DbContextOptions<ResearchDbContext> option
         metrics.Property(value => value.Unit);
         metrics.Property(value => value.Sequence);
         metrics.HasIndex(value => new { value.RunId, value.Sequence }).IsUnique();
+        metrics.HasIndex(value => new { value.RunId, value.Name, value.Sequence });
     }
 }
 

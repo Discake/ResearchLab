@@ -74,6 +74,8 @@ namespace ResearchLab.Infrastructure.Persistence.Migrations
                     b.HasIndex("RunId", "Sequence")
                         .IsUnique();
 
+                    b.HasIndex("RunId", "Name", "Sequence");
+
                     b.ToTable("MetricPoints", (string)null);
                 });
 

@@ -197,3 +197,11 @@ M3.7e (2026-10-25): restore, build, все 302 теста без пропуск�
 прошли. Проверена Windows 11 25H2 x64 build 26200.9711; другие Windows и Unix не проверены.
 Можно начинать M4 в этих границах. [Demo, регрессии и ограничения](docs/m3-final-verification.ru.md),
 включая отсутствие ручного Ctrl+C и ограничения JSON в PowerShell 5.1.
+
+M4.2 provides bounded durable metric ingestion through Application, with atomic SQLite
+batches and the existing Run version fence. ProcessRunner integration remains pending.
+[Contract, performance and integration limits](docs/metric-ingestion.md).
+
+M4.2 добавляет ограниченный долговременный приём метрик через Application: атомарные
+пакеты SQLite и существующая проверка версии Run. ProcessRunner пока не подключён.
+[Контракт, производительность и границы интеграции](docs/metric-ingestion.ru.md).

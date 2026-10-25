@@ -6,6 +6,11 @@ public sealed class Run
 {
     private readonly List<MetricPoint> metrics = [];
     private DateTimeOffset lastTransitionAt;
+    private long? metricSequence;
+    private Dictionary<string, string?>? metricUnits;
+    private HashSet<string>? allowedMetricNames;
+    private int metricWindowLimit;
+    internal bool IsMetricWindow => metricSequence.HasValue;
 
     private Run()
     {
@@ -122,13 +127,33 @@ public sealed class Run
         CheckVersion(expectedVersion);
         if (Status != RunStatus.Running)
             throw new DomainException("InvalidMetricState", "Metrics can only be appended while Running.");
-        var metric = new MetricPoint(Id, name, value, step, recordedAt, unit, metrics.Count + 1L);
+        if (allowedMetricNames is not null && (!allowedMetricNames.Contains(name) || metrics.Count >= metricWindowLimit))
+            throw new DomainException("MetricWindowExceeded", "Metric is outside the bounded persistence window.");
+        var metric = new MetricPoint(Id, name, value, step, recordedAt, unit,
+            checked((metricSequence ?? metrics.Count) + 1L));
         var previous = metrics.FirstOrDefault(point => point.Name == name);
-        if (previous is not null && !string.Equals(previous.Unit, unit, StringComparison.Ordinal))
+        if ((previous is not null && !string.Equals(previous.Unit, unit, StringComparison.Ordinal)) ||
+            (metricUnits is not null && metricUnits.TryGetValue(name, out var existingUnit) &&
+                !string.Equals(existingUnit, unit, StringComparison.Ordinal)))
             throw new DomainException("IncompatibleMetricUnit", $"Unit for metric '{name}' changed within the run.");
         metrics.Add(metric);
+        if (metricSequence.HasValue)
+            metricSequence++;
         Version++;
         return metric;
+    }
+
+    // Persistence-only hydration: Metrics contains new points, never a truncated history
+    // masquerading as a complete aggregate. This window must use its dedicated save path.
+    internal void InitializeMetricWindow(long sequence, IReadOnlyCollection<string> names,
+        IReadOnlyDictionary<string, string?> units, int limit)
+    {
+        if (metrics.Count != 0 || metricSequence.HasValue)
+            throw new InvalidOperationException("Metric window requires a freshly loaded Run without metrics.");
+        metricSequence = sequence;
+        metricWindowLimit = limit;
+        metricUnits = new Dictionary<string, string?>(units, StringComparer.Ordinal);
+        allowedMetricNames = new HashSet<string>(names, StringComparer.Ordinal);
     }
 
     private void CheckVersion(long expectedVersion)

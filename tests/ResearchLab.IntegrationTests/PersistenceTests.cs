@@ -66,7 +66,7 @@ public sealed class PersistenceTests
         await connection.OpenAsync(TestContext.Current.CancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM __EFMigrationsHistory";
-        Assert.Equal(2L, await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(3L, await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]

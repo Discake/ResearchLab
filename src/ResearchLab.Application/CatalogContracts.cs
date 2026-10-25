@@ -20,6 +20,16 @@ public interface IResearchStore
     Task<Run?> GetRunAsync(RunId id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Run>> ListRunsAsync(ExperimentId experimentId, RunPageRequest page, CancellationToken cancellationToken = default);
     Task SaveRunAsync(Run run, long expectedVersion, CancellationToken cancellationToken = default);
+    // Bounded append/terminal unit of work; implementations must use the same Run version fence.
+    Task<IRunMetricWrite> OpenRunMetricWriteAsync(RunId id, IReadOnlyCollection<string> names,
+        long? expectedVersion = null, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This store does not support bounded metric writes.");
+}
+
+public interface IRunMetricWrite : IAsyncDisposable
+{
+    Run Run { get; }
+    Task SaveAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed record WorkspaceInspection(string CanonicalPath, IReadOnlyDictionary<string, TaskSnapshot> Tasks,
