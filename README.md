@@ -2,7 +2,7 @@
 
 Local-first research platform connecting source code, experiment runs, recorded
 evidence and publishable Research Stories. This repository currently implements
-**M0–M3 plus M4.1–M4.3: domain core, SQLite/import, trusted local execution and structured metric ingestion**.
+**M0–M3 plus M4.1–M4.4: domain core, SQLite/import, trusted local execution and structured metric ingestion**.
 M3 includes preparation, trusted foreground execution, managed cancellation, local recovery and verified Windows Job containment. The application API
 is usable from .NET code and the foreground CLI. A UI is not implemented yet.
 
@@ -155,7 +155,7 @@ Active and unknown owners are skipped; no process is killed. M4 artifact storage
 
 ## Кратко по-русски
 
-Реализованы M0–M3 и M4.1–M4.3: доменное ядро, SQLite/EF Core, импорт, каталог экспериментов
+Реализованы M0–M3 и M4.1–M4.4: доменное ядро, SQLite/EF Core, импорт, каталог экспериментов
 и явное подтверждение доверия. Структурированные метрики stdout сохраняются в SQLite.
 M3 дополнен подготовкой и минимальным доверенным исполнением
 с сохранением состояний Run и раздельных ограниченных логов stdout/stderr.
@@ -214,3 +214,7 @@ barrier, bounded protocol diagnostics and a final flush before terminal persiste
 M4.3 подключает настоящий stdout к M4.1/M4.2: барьер сохранения Running, ограниченная
 диагностика и финальный flush перед terminal persistence.
 [Последовательность, обработка ошибок и ограничения](docs/structured-execution.ru.md).
+
+M4.4 adds bounded read-only metric pages and a real-process CLI smoke test: [EN](docs/metric-query.md).
+
+M4.4 добавляет ограниченное чтение метрик и CLI smoke-test с реальным процессом: [RU](docs/metric-query.ru.md).

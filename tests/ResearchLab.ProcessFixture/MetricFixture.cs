@@ -7,6 +7,18 @@ internal static class MetricFixture
 
     public static async Task<int> RunAsync(string mode)
     {
+        if (mode == "metric-demo")
+        {
+            using var input = System.Text.Json.JsonDocument.Parse(Environment.GetEnvironmentVariable("RESEARCHLAB_PARAMETERS_JSON")!);
+            var n = input.RootElement.GetProperty("n").GetInt32();
+            Console.Error.WriteLine("Demonstration calculations, not a benchmark.");
+            foreach (var step in new[] { 1, 1, 2 })
+                Console.WriteLine("@researchlab/v1 " + System.Text.Json.JsonSerializer.Serialize(new
+                { type = "metric", name = "demo_square", value = n * step * n * step, step, unit = "1" }));
+            Console.WriteLine("@researchlab/v1 " + System.Text.Json.JsonSerializer.Serialize(new
+            { type = "metric", name = "demo_input", value = n }));
+            return 0;
+        }
         using var stdout = Console.OpenStandardOutput();
         using var stderr = Console.OpenStandardError();
         if (mode is "metric-early" or "metric-ordinary-early")

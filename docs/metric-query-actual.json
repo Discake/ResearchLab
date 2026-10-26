@@ -1,0 +1,41 @@
+{
+  "runId": "3c725c57-5ce3-4335-817a-c6ba2a5bf9b8",
+  "name": null,
+  "offset": 0,
+  "pageSize": 50,
+  "hasMore": false,
+  "points": [
+    {
+      "name": "demo_square",
+      "value": 4,
+      "step": 1,
+      "unit": "1",
+      "recordedAtUtc": "2026-10-26T16:12:47.028103+00:00",
+      "sequence": 1
+    },
+    {
+      "name": "demo_square",
+      "value": 4,
+      "step": 1,
+      "unit": "1",
+      "recordedAtUtc": "2026-10-26T16:12:47.0292566+00:00",
+      "sequence": 2
+    },
+    {
+      "name": "demo_square",
+      "value": 16,
+      "step": 2,
+      "unit": "1",
+      "recordedAtUtc": "2026-10-26T16:12:47.0292896+00:00",
+      "sequence": 3
+    },
+    {
+      "name": "demo_input",
+      "value": 2,
+      "step": null,
+      "unit": null,
+      "recordedAtUtc": "2026-10-26T16:12:47.0318815+00:00",
+      "sequence": 4
+    }
+  ]
+}

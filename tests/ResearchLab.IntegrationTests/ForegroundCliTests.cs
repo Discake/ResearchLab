@@ -10,7 +10,7 @@ using Xunit;
 
 namespace ResearchLab.IntegrationTests;
 
-public sealed class ForegroundCliTests
+public sealed partial class ForegroundCliTests
 {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 

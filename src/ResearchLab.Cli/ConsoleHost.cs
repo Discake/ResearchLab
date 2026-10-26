@@ -20,6 +20,7 @@ public static partial class ConsoleHost
         researchlab --database <sqlite-file> --data-dir <log-root> experiment list --project <project-id>
         researchlab --database <sqlite-file> --data-dir <log-root> run list --experiment <experiment-id> [--offset <n>] [--page-size <n>]
         researchlab --database <sqlite-file> --data-dir <log-root> run show <run-id>
+        researchlab --database <sqlite-file> --data-dir <log-root> run metrics <run-id> [--name <metric>] [--offset <n>] [--page-size <n>]
         researchlab --database <sqlite-file> --data-dir <log-root> run show <run-id> --include-logs
         researchlab --database <sqlite-file> --data-dir <log-root> run start <experiment-id> [--parameters <json-object>]
         researchlab --database <sqlite-file> --data-dir <log-root> run recover
@@ -56,7 +57,7 @@ public static partial class ConsoleHost
         {
             if (File.Exists(request.DataDirectory))
                 throw new IOException("Configured data directory is not a directory.");
-            var readOnly = request.Command is ConsoleCommand.ProjectList or ConsoleCommand.ExperimentList or ConsoleCommand.RunList or ConsoleCommand.RunShow;
+            var readOnly = request.Command is ConsoleCommand.ProjectList or ConsoleCommand.ExperimentList or ConsoleCommand.RunList or ConsoleCommand.RunShow or ConsoleCommand.RunMetrics;
             var store = new SqliteResearchStore(request.DatabasePath, readOnly: readOnly,
                 createIfMissing: request.Command == ConsoleCommand.DatabaseInit);
             var catalog = new ProjectCatalog(store, new WorkspaceInspector());
@@ -115,6 +116,10 @@ public static partial class ConsoleHost
                 case ConsoleCommand.RunList:
                     result = (await history.ListRunsAsync(new ExperimentId(request.Id!.Value), request.Page, cancellationToken))
                         .Select(run => Describe(run)).ToArray();
+                    break;
+                case ConsoleCommand.RunMetrics:
+                    var metrics = await ((IRunMetricReader)store).GetMetricsAsync(new RunId(request.Id!.Value), request.MetricName, request.Page, cancellationToken);
+                    result = new { RunId = metrics.RunId.Value, metrics.Name, metrics.Offset, metrics.PageSize, metrics.HasMore, metrics.Points };
                     break;
                 case ConsoleCommand.RunShow:
                     var details = await history.GetRunAsync(new RunId(request.Id!.Value), cancellationToken);

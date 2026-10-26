@@ -3,11 +3,11 @@ using ResearchLab.Application;
 
 namespace ResearchLab.Cli;
 
-public enum ConsoleCommand { ProjectList, ExperimentList, RunList, RunShow, RunStart, RunRecover, DatabaseInit, ProjectImport, ExperimentCreate }
+public enum ConsoleCommand { ProjectList, ExperimentList, RunList, RunShow, RunMetrics, RunStart, RunRecover, DatabaseInit, ProjectImport, ExperimentCreate }
 
 public sealed record CommandArguments(ConsoleCommand Command, string DatabasePath, string DataDirectory,
     Guid? Id, RunPageRequest Page, string Parameters = "{}", bool IncludeLogs = false,
-    string? Workspace = null, string? Name = null, string? Definition = null)
+    string? Workspace = null, string? Name = null, string? Definition = null, string? MetricName = null)
 {
     public static CommandArguments Parse(string[] args)
     {
@@ -45,6 +45,7 @@ public sealed record CommandArguments(ConsoleCommand Command, string DatabasePat
             ["experiment", "list"] => ConsoleCommand.ExperimentList,
             ["run", "list"] => ConsoleCommand.RunList,
             ["run", "show", _] => ConsoleCommand.RunShow,
+            ["run", "metrics", _] => ConsoleCommand.RunMetrics,
             ["run", "start", _] => ConsoleCommand.RunStart,
             ["run", "recover"] => ConsoleCommand.RunRecover,
             ["database", "init"] => ConsoleCommand.DatabaseInit,
@@ -57,6 +58,7 @@ public sealed record CommandArguments(ConsoleCommand Command, string DatabasePat
             var allowed = option is "--database" or "--data-dir" ||
                 (command is ConsoleCommand.ExperimentList or ConsoleCommand.ExperimentCreate && option == "--project") ||
                 (command == ConsoleCommand.RunList && option is "--experiment" or "--offset" or "--page-size") ||
+                (command == ConsoleCommand.RunMetrics && option is "--name" or "--offset" or "--page-size") ||
                 (command == ConsoleCommand.RunStart && option == "--parameters") ||
                 (command == ConsoleCommand.ProjectImport && option == "--name") ||
                 (command == ConsoleCommand.ExperimentCreate && option == "--definition");
@@ -71,7 +73,7 @@ public sealed record CommandArguments(ConsoleCommand Command, string DatabasePat
         {
             ConsoleCommand.ExperimentList or ConsoleCommand.ExperimentCreate => Identifier(Required("--project")),
             ConsoleCommand.RunList => Identifier(Required("--experiment")),
-            ConsoleCommand.RunShow or ConsoleCommand.RunStart => Identifier(words[2]),
+            ConsoleCommand.RunShow or ConsoleCommand.RunMetrics or ConsoleCommand.RunStart => Identifier(words[2]),
             _ => null
         };
         var defaults = new RunPageRequest();
@@ -82,7 +84,8 @@ public sealed record CommandArguments(ConsoleCommand Command, string DatabasePat
             options.GetValueOrDefault("--parameters", "{}"), includeLogs,
             command == ConsoleCommand.ProjectImport ? FullPath(words[2]) : null,
             command == ConsoleCommand.ProjectImport ? Required("--name") : null,
-            command == ConsoleCommand.ExperimentCreate ? FullPath(Required("--definition")) : null);
+            command == ConsoleCommand.ExperimentCreate ? FullPath(Required("--definition")) : null,
+            command == ConsoleCommand.RunMetrics ? options.GetValueOrDefault("--name") : null);
 
         string Required(string option) => options.TryGetValue(option, out var value) ? value :
             throw new ArgumentException($"Required option {option} is missing.");
