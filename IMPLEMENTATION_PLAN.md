@@ -115,26 +115,43 @@ Acceptance:
 - Project import, create Experiment, list/reopen after restart.
 - Git data is best-effort, never presented as full reproducibility.
 
-### M3 — Local execution and Run history
+### M3 — Local execution, Run history and minimal CLI
 
-**Outcome:** a trusted console executable can be launched, tracked and canceled.
+**Outcome:** a trusted console executable can be launched, observed and canceled through a minimal CLI; run history remains available after restarting the tool.
 
-Implement:
-- `StartRun(experimentId, parameters)` application use case with validation and frozen launch snapshots.
-- Process runner with `ProcessStartInfo.ArgumentList`; `UseShellExecute=false`, working directory and dedicated output directory.
-- Concurrent stdout/stderr draining; bounded logs; robust cancellation, timeout, process-tree termination and exit-code handling.
-- State persistence and crash recovery: Created/Running of verified ended owner sessions → Interrupted; skip active/unknown owners. Implemented M3.3 contract: [EN](docs/run-recovery.md) / [RU](docs/run-recovery.ru.md).
-- List/detail of Runs with timestamps, exit codes and failure diagnostics.
-- A small sample executable for success, failure, slow run and log output.
+Implement in small substeps:
+1. **M3.1 — Application orchestration:** `StartRun(experimentId, parameters)`, `CancelRun(runId)`, `GetRun(runId)`, and `ListRuns(experimentId)`. Validate parameters, re-check trust immediately before launch, and persist frozen launch snapshots.
+2. **M3.2 — ProcessRunner:** use `ProcessStartInfo.ArgumentList`, `UseShellExecute=false`, an explicit working directory and dedicated output directory. Drain stdout/stderr concurrently; enforce log limits, timeout and cancellation, and terminate the process tree where supported.
+3. **M3.3 — Persistence and recovery:** save lifecycle transitions with optimistic concurrency; reconcile stale `Running` runs to `Interrupted` after a crash or restart; preserve diagnostics and prevent conflicting terminal updates.
+4. **M3.4 — Minimal CLI:** add a thin, disposable-friendly console host calling Application use cases, not duplicating domain/execution logic. Provide at least project/experiment listing, a run start command, run history/detail, and a way to cancel a long-running run while the command is active. The CLI is an author-facing verification tool, not a second product.
+5. **M3.5 — Integration tests:** verify the end-to-end CLI/use-case path, process success/failure, launch errors, cancellation, timeout, high-volume stdout/stderr and lifecycle races.
+
+**Important CLI lifecycle decision:** in MVP M3, `run start` may remain attached to the executing process until it exits. It must not return immediately while abandoning an unowned background process. An always-on daemon, detached execution and cross-session cancellation are **out of scope**. If a separate terminal issues `run cancel`, document clearly whether it can signal an active host; do not claim cross-process cancellation without an actual coordination mechanism. At minimum, support cancellation in the active CLI session (for example, Ctrl+C), with `CancelRun` preserved as an application operation for later hosts.
+
+Illustrative commands (final syntax can differ):
+
+```sh
+researchlab project list
+researchlab experiment list
+researchlab run start <experiment-id>
+researchlab run list
+researchlab run show <run-id>
+```
 
 Tests:
-- Success/nonzero code, launch failure, cancellation/timeout, large stdout+stderr output without deadlock.
-- Concurrent cancel/exit race yields one terminal state.
-- Restart reconciliation does not rewrite already terminal Runs.
+- Success/nonzero code, startup failure (`Created → Failed`), cancellation/timeout and large stdout+stderr output without deadlock.
+- Concurrent cancellation/exit race produces a single terminal status.
+- Restart reconciliation does not overwrite terminal runs.
+- CLI can launch a real trusted sample program, present its logs and outcome, and show persisted runs after restart.
+- Cancellation of an attached run is observable and persists `Canceled`.
 
 Acceptance:
-- Three invocations with different parameters produce distinct Run records.
-- Failed and canceled runs retain diagnostics.
+- Three launches with different valid parameter sets create distinct persistent Run records.
+- Author can use the CLI without changing ResearchLab source code or manipulating the database.
+- A long-running task can be canceled from its active CLI session.
+- Failed, canceled and timed-out runs retain diagnostics and correct status.
+- Historical runs remain visible after the CLI is restarted.
+- No metrics protocol, charts, web UI, daemon, distributed worker or Story editor is required in M3.
 
 #### M3.6 — local CLI completion (implemented)
 

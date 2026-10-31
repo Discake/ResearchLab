@@ -110,8 +110,7 @@ Created ───────→ Running ───────→ Succeeded
     │               ├───────────→ TimedOut
     │               └───────────→ Interrupted
     ├───────────→ Failed
-    ├───────────→ Canceled
-    └───────────→ Interrupted
+    └───────────→ Canceled
 ```
 
 - `Created`: validated and persisted; no process-start acknowledgement has been durably recorded.
@@ -122,7 +121,7 @@ Created ───────→ Running ───────→ Succeeded
 - `TimedOut`: run exceeded its configured limit and was terminated.
 - `Interrupted`: the execution owner session ended before recording a terminal outcome; determined on recovery from verified ownership loss. Allowed from Created and Running. It does not assert child-process termination or invent missing startup evidence.
 
-A process-start failure must not be represented as `Running`: only transition to `Running` after successful process start. A terminal status cannot transition again. Use optimistic concurrency/version checks to avoid conflicting terminal updates. Recovery may reconcile Created/Running only when durable ownership of a conclusively ended session is established; age or PID alone is insufficient. Created → Interrupted covers ambiguous startup without fabricating PID/start time/exit code. Unknown or active owners are left unchanged. No transparent automatic retries in MVP.
+A process-start failure must not be represented as `Running`: only transition to `Running` after successful process start. A terminal status cannot transition again. Use optimistic concurrency/version checks to avoid conflicting terminal updates. Crash recovery may reconcile a stale `Running` record as `Interrupted`. No transparent automatic retries in MVP.
 
 ## 6. Execution contract (MVP)
 
