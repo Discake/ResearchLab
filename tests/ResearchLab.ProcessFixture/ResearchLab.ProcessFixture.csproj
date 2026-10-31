@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/ResearchLab.Execution/ResearchLab.Execution.csproj" />
+    <ProjectReference Include="../../src/ResearchLab.Infrastructure/ResearchLab.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

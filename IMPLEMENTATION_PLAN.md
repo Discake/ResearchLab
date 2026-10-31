@@ -81,7 +81,7 @@ Implement:
 - Project + Experiment with `TaskKey` and typed parameter definitions.
 - Parameter validation (required/default, numeric range, allowed values, unsupported type).
 - Run with immutable parameters, experiment/task snapshot, source/environment snapshot.
-- RunStatus state machine: Created → Running → Succeeded/Failed/Canceled/TimedOut/Interrupted; Created → Canceled.
+- RunStatus state machine: Created → Running → Succeeded/Failed/Canceled/TimedOut/Interrupted; Created → Failed/Canceled. M3.3 adds Created → Interrupted for verified owner loss without inventing startup evidence (startup failure must not imply Running).
 - MetricPoint: finite numeric value, name, unit, optional step, ingestion order.
 - Domain errors with clear reasons; no repository/network dependencies.
 
@@ -153,6 +153,34 @@ Acceptance:
 - Historical runs remain visible after the CLI is restarted.
 - No metrics protocol, charts, web UI, daemon, distributed worker or Story editor is required in M3.
 
+#### M3.6 — local CLI completion (implemented)
+
+Explicit CLI recovery delegates to M3.3; per-Run output allocation and RESEARCHLAB_OUTPUT_DIR preserve workspace CWD. No process ownership changes or M4 registration. [EN contract and remaining M3 boundaries](docs/local-run-completion.md) / [RU](docs/local-run-completion.ru.md).
+
+#### M3.7b — isolated Windows native launch (implemented)
+
+Internal CreateProcessW/STARTUPINFOEX launcher creates a process directly in its own kill-on-close Job, with explicit standard-handle inheritance and owned native resources. Initially separate from ProcessRunner/CLI; integrated in M3.7c below. Windows tests include exact Job membership and owner-death termination of root and descendant. [EN contract](docs/windows-native-launcher.md) / [RU](docs/windows-native-launcher.ru.md).
+
+Внутренний Windows launcher создаёт процесс сразу в собственном Job с kill-on-close, явным наследованием стандартных handles и владением native-ресурсами. Первоначально отдельный; подключён к ProcessRunner/CLI в M3.7c ниже. Windows-тесты проверяют членство в конкретном Job и остановку корня/потомка после гибели владельца.
+
+#### M3.7c — Windows Job group lifecycle (implemented)
+
+ProcessRunner/CLI use native creation-time containment on Windows without fallback. Shared control/logging/cleanup drives a small OS resource adapter. Root exit/code are captured and the root handle released before Job accounting reaches zero; settled collection is also required. Cancel/timeout/critical output errors stop the whole Job; unknown cleanup retains the same owner for retry. Domain, Application lifecycle, recovery and schema are unchanged. [EN contract](docs/windows-group-lifecycle.md) / [RU](docs/windows-group-lifecycle.ru.md). M3.7d crash-window tests are verified below.
+
+ProcessRunner/CLI используют native containment на Windows без fallback. Общие control/logging/cleanup управляют небольшим адаптером ресурсов. Exit/code корня сохраняются, root handle закрывается до ожидания нулевого Job accounting; требуется завершённый сбор. Cancel/timeout/критические ошибки вывода останавливают весь Job; неподтверждённая очистка сохраняет владельца для повтора. Domain, Application lifecycle, recovery и схема не изменены. Crash-window tests M3.7d проверены ниже.
+
+#### M3.7d — Windows crash and persistence verification (verified)
+
+Real out-of-process CLI crash tests terminate only the owner through TerminateProcess and observe fixture process handles without retaining its Run Job. Five compile-time test-only startup checkpoints plus terminal-save boundaries distinguish unsaved results from durable success. Shared-DB concurrent owners remain isolated; corrupt ownership evidence stays unverified; recovery never signals recorded PIDs. The 21-case matrix and all 302 solution tests passed on the documented Windows x64 build. No production execution defect, Domain/schema change or architecture rewrite was required. [EN evidence/limits](docs/windows-crash-safety.md) / [RU](docs/windows-crash-safety.ru.md).
+
+Реальные отдельные CLI crash tests завершают только владельца через TerminateProcess и наблюдают process handles fixture, не удерживая его Run Job. Пять compile-time test-only startup checkpoints и границы terminal save отделяют несохранённый результат от durable success. Конкурентные владельцы в общей БД изолированы; повреждённое ownership evidence остаётся unverified; recovery не сигналит сохранённые PID. Матрица 21 случая и все 302 теста solution прошли на указанном Windows x64 build. Дефект рабочего исполнения, изменение Domain/схемы или смена архитектуры не потребовались.
+
+#### M3.7e — final verification and documentation (verified within Windows scope)
+
+Restore, build, 302/302 tests (zero skips), format and EF pending-model check passed on 2026-10-25. The full suite includes all 21 crash cases. Foreground demo success/failure, timeout, history/logs, explicit recovery and output allocation were exercised; real Ctrl+C and post-crash recovery were automated, not a separate manual keyboard/crash walkthrough. Verified Windows 11 25H2 x64 build 26200.9711; other Windows builds and Unix remain unverified. M3 local execution criteria are met in this scope; M4 may begin. [EN results and limits](docs/m3-final-verification.md) / [RU](docs/m3-final-verification.ru.md).
+
+2026-10-25 прошли restore, build, 302/302 теста без пропусков, format и EF model check, включая все 21 crash case. Проверены demo success/failure, timeout, история/логи, явный recovery и output allocation; настоящий Ctrl+C и recovery после аварии проверены автоматически, без отдельного ручного keyboard/crash walkthrough. Проверена Windows 11 25H2 x64 build 26200.9711; другие Windows и Unix не проверены. Критерии локального исполнения M3 закрыты в этих границах; можно начинать M4.
+
 ### M4 — Protocol, metrics and artifacts
 
 **Outcome:** experimental evidence is recorded with source provenance.
@@ -160,7 +188,7 @@ Acceptance:
 Implement:
 - Versioned line protocol `@researchlab/v1 {json}` from stdout.
 - Metric event parser and validation, bounded event lengths/counts, durable storage.
-- Pass parameters via `RESEARCHLAB_PARAMETERS_JSON`; output directory via `RESEARCHLAB_OUTPUT_DIR`.
+- Reuse parameter transport via `RESEARCHLAB_PARAMETERS_JSON` and per-Run output via `RESEARCHLAB_OUTPUT_DIR` (available in M3.6).
 - Artifact registration restricted to run output directory, with symlink/canonicalization guards, quotas and SHA-256.
 - File viewing/download through safe application endpoints (not raw arbitrary filesystem paths).
 - C++ sample using the protocol and producing metric series + one artifact.

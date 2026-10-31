@@ -1,0 +1,13 @@
+{
+  "name": "Foreground execution demo",
+  "description": "A local sum example; no benchmark measurements are claimed.",
+  "taskKey": "benchmark",
+  "parameters": [
+    { "name": "iterations", "type": "int", "required": true, "default": 10, "minimum": 1, "maximum": 10000 },
+    { "name": "scale", "type": "double", "default": 0.5, "minimum": 0, "maximum": 10 },
+    { "name": "label", "type": "string", "default": "demo" },
+    { "name": "verbose", "type": "bool", "default": false },
+    { "name": "delayMilliseconds", "type": "int", "default": 0, "minimum": 0, "maximum": 60000 },
+    { "name": "fail", "type": "bool", "default": false }
+  ]
+}
