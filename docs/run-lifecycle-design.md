@@ -1,5 +1,7 @@
 # Run lifecycle and executor interaction — proposed design
 
+> Status: historical proposal, partly superseded. The body preserves the original design, including APIs and restrictions that are not current. Follow [managed cancellation](managed-cancellation.md), [recovery](run-recovery.md), [Windows group lifecycle](windows-group-lifecycle.md), and [structured execution](structured-execution.md) for implemented behavior.
+
 Implementation update: foreground ownership and cancellation now follow
 [managed cancellation](managed-cancellation.md). That contract deliberately returns a
 caller-owned attempt and keeps a foreground driver instead of adding the service/async

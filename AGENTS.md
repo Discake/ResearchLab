@@ -13,6 +13,14 @@ Read these documents before making architectural decisions:
 
 If translations diverge, explicitly report the discrepancy; do not silently change product decisions. Treat the English documents as current canonical specifications and update both languages when agreed requirements change.
 
+## Context discovery
+
+- Start with [docs/CODEMAP.md](docs/CODEMAP.md) to locate relevant modules before reading source; use [docs/README.md](docs/README.md) to select documentation.
+- For a small local change, read only task-relevant contracts initially. For architecture or domain-contract changes, consult VISION.md, DOMAIN.md and relevant [decisions](docs/decisions/README.md).
+- Prefer targeted searches by path, symbol and link. Expand the investigation whenever dependencies or missing context require it; this is a starting route, not a restriction on exploration.
+- Historical proposals and verification reports do not establish current implementation. Check code and tests; distinguish product requirements from delivered features.
+- For substantial changes, update the affected documentation and code map.
+
 ## Agent working agreement
 
 1. **Prefer a small, vertical, working increment.** Implement the path from project import through execution, metrics and publication before optional features.

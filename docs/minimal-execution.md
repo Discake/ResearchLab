@@ -32,8 +32,9 @@ This deliberately implements a smaller blocking workflow than the asynchronous s
 acknowledgement proposed in the lifecycle design. Preparation/validation failures throw
 before insertion. Startup failures return the ID of a persisted Failed Run without PID,
 start time or exit code. Nonzero exit produces Failed with the actual exit code; zero exit
-and successful bounded stream draining produce Succeeded. There is no metric/artifact
-protocol yet, and success makes no claim about scientific validity or expected measurements.
+and successful bounded collection produce Succeeded. [M4.3](structured-execution.md) now also
+requires accepted metrics to be flushed before terminal persistence. Artifact registration
+remains unimplemented; success makes no claim about scientific validity or expected measurements.
 
 Snapshots use Domain validation/defaults and existing factories. Fresh best-effort source
 inspection precedes Run creation; unavailable Git data remains unknown. Reloaded definitions

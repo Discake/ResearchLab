@@ -40,7 +40,8 @@ ancestors. Keep storage private and outside the workspace. This is not file isol
 programs can ignore the variable, modify other accessible files or replace paths after checks.
 Concurrent hostile filesystem replacement remains a TOCTOU limitation. Output files have no
 quota, checksum, immutability, registration, download API or publication semantics yet. M4
-protocol and artifact registration remain unimplemented; the log byte cap does not limit files.
+metric ingestion is now implemented in [structured execution](structured-execution.md); artifact
+registration remains unimplemented. The log byte cap does not limit files.
 
 ## Remaining M3 boundaries
 

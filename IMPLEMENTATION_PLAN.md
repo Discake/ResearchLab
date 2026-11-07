@@ -1,5 +1,9 @@
 # ResearchLab — Implementation Plan
 
+> Reading guide (2026-11-07): this is a delivery proposal with historical milestone updates, not a current API reference. The checkout implements the CLI path through M3 and metrics M4.1–M4.4; artifact registration, Web/UI and publication remain future work. Use the [documentation index](docs/README.md) and [code map](docs/CODEMAP.md) for implemented contracts. The original M3 operation names and ProcessStartInfo-only description below are proposals: current ownership is [foreground](docs/managed-cancellation.md), recovery handles both Created and Running via [session evidence](docs/run-recovery.md), and Windows uses [native Job containment](docs/windows-group-lifecycle.md). Verification counts are dated evidence, not a fresh test run.
+>
+> Навигация: план содержит предложения и исторические отметки. Реализованы CLI до M3 и метрики M4.1–M4.4; артефакты, Web/UI и публикация остаются будущими этапами. Текущие контракты: [владение](docs/managed-cancellation.ru.md), [recovery Created/Running](docs/run-recovery.ru.md), [Windows Job](docs/windows-group-lifecycle.ru.md). Числа тестов относятся к указанным датам.
+
 > Status: proposed v0.1 · 2026-10-24
 > Product direction: Lab-first, local-first.
 > Governing documents: [VISION.md](VISION.md), [DOMAIN.md](DOMAIN.md), [AGENTS.md](AGENTS.md).
@@ -286,6 +290,8 @@ Acceptance:
 Prefer one reviewable task at a time. The stages describe order, not a requirement to create all projects/interfaces immediately.
 
 ## 5. First agent assignment (copyable prompt)
+
+Historical bootstrap prompt below; the bootstrap is already merged into main. It is not an instruction to recreate the skeleton.
 
 > Read AGENTS.md, VISION.md, DOMAIN.md and their Russian versions in Discake/ResearchLab. Implement **M0 only** on a new branch `chore/bootstrap`. Inspect repository state and installed toolchain first. Bootstrap the minimal .NET solution with Domain, Application, Infrastructure, Execution, and Web host only if that structure is justified by an immediate need; a smaller initial structure is acceptable. Add a test project, a useful first smoke test, .editorconfig, .gitignore and README with exact commands. Do not implement database, task engine, experimental features or rich UI yet. Run restore/build/test and report actual results; if dependencies are unavailable, explain blockers rather than claiming success. Explain project references and any differences from the plan. Open a PR for review if authorized; do not merge it or modify main directly.
 

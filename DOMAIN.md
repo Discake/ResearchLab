@@ -110,7 +110,8 @@ Created ───────→ Running ───────→ Succeeded
     │               ├───────────→ TimedOut
     │               └───────────→ Interrupted
     ├───────────→ Failed
-    └───────────→ Canceled
+    ├───────────→ Canceled
+    └───────────→ Interrupted
 ```
 
 - `Created`: validated and persisted; no process-start acknowledgement has been durably recorded.
@@ -171,6 +172,8 @@ The prefix distinguishes protocol messages from arbitrary console output. Unknow
 8. Running a public Story never calls the author’s local executor.
 
 ## 8. Suggested persistence / boundaries
+
+Implementation scope: this section describes the target MVP. The current host is CLI; Web/API, artifacts and publication are not implemented. Execution uses native Windows Job containment on Windows and ProcessStartInfo on non-Windows; see the [current process contract](docs/windows-group-lifecycle.md) and [code map](docs/CODEMAP.md).
 
 - **SQLite + EF Core:** projects, experiments, runs, metrics, artifact metadata, stories, publications.
 - **Filesystem:** log streams, registered immutable files, exported static pages.
